@@ -348,6 +348,136 @@ impl VkLdapConnection {
         Ok(sentry.attrs[dn_attribute][0].clone())
     }
 
+    pub async fn search_groups(
+        &mut self,
+        settings: &VkLdapSettings,
+        user_dn: &str,
+        timeout: Duration,
+    ) -> Result<Vec<String>> {
+        if let Some(bind_dn) = &settings.search_bind_dn {
+            if let Some(bind_passwd) = &settings.search_bind_passwd {
+                debug!("running ldap admin bind with DN='{bind_dn}'");
+                handle_ldap_error!(
+                    self.ldap_handler
+                        .with_timeout(timeout)
+                        .simple_bind(&bind_dn, &bind_passwd)
+                        .await,
+                    VkLdapError::LdapAdminBindError
+                );
+            }
+        }
+
+        let mut base = "";
+        if let Some(sbase) = &settings.groups_search_base {
+            base = &sbase;
+        } else if let Some(sbase) = &settings.search_base {
+            base = &sbase;
+        }
+
+        let mut filter = "objectClass=groupOfNames";
+        if let Some(sfilter) = &settings.groups_filter {
+            filter = &sfilter;
+        }
+
+        let member_attr = &settings.groups_member_attribute;
+        let name_attr = &settings.groups_name_attribute;
+
+        let search_filter = format!("(&({filter})({member_attr}={user_dn}))");
+        let scope = settings.search_scope;
+
+        debug!(
+            "running ldap group search with filter='{search_filter}' scope='{:?}' attrs='{name_attr}'",
+            scope
+        );
+        let (rs, _res) = handle_ldap_error!(
+            self.ldap_handler
+                .with_timeout(timeout)
+                .search(base, scope, search_filter.as_str(), vec![name_attr])
+                .await,
+            VkLdapError::LdapSearchError
+        );
+
+        let mut groups: Vec<String> = Vec::new();
+        for entry in rs.into_iter() {
+            let sentry = SearchEntry::construct(entry);
+            if let Some(vals) = sentry.attrs.get(name_attr) {
+                for v in vals { groups.push(v.clone()); }
+            }
+        }
+        Ok(groups)
+    }
+
+    pub async fn search_groups_rules(
+        &mut self,
+        settings: &VkLdapSettings,
+        user_dn: &str,
+        timeout: Duration,
+    ) -> Result<Vec<String>> {
+        if let Some(bind_dn) = &settings.search_bind_dn {
+            if let Some(bind_passwd) = &settings.search_bind_passwd {
+                debug!("running ldap admin bind with DN='{bind_dn}'");
+                handle_ldap_error!(
+                    self.ldap_handler
+                        .with_timeout(timeout)
+                        .simple_bind(&bind_dn, &bind_passwd)
+                        .await,
+                    VkLdapError::LdapAdminBindError
+                );
+            }
+        }
+
+        let mut base = "";
+        if let Some(sbase) = &settings.groups_search_base {
+            base = &sbase;
+        } else if let Some(sbase) = &settings.search_base {
+            base = &sbase;
+        }
+
+        let mut filter = "objectClass=groupOfNames";
+        if let Some(sfilter) = &settings.groups_filter {
+            filter = &sfilter;
+        }
+
+        let member_attr = &settings.groups_member_attribute;
+        let rules_attr = &settings.groups_rules_attribute;
+
+        let search_filter = format!("(&({filter})({member_attr}={user_dn}))");
+        let scope = settings.search_scope;
+
+        debug!(
+            "running ldap group rules search with filter='{search_filter}' scope='{:?}' attrs='{rules_attr}'",
+            scope
+        );
+        let (rs, _res) = handle_ldap_error!(
+            self.ldap_handler
+                .with_timeout(timeout)
+                .search(base, scope, search_filter.as_str(), vec![rules_attr])
+                .await,
+            VkLdapError::LdapSearchError
+        );
+
+        use std::collections::HashSet;
+        let mut rules: Vec<String> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        for entry in rs.into_iter() {
+            let sentry = SearchEntry::construct(entry);
+            if let Some(vals) = sentry.attrs.get(rules_attr) {
+                for v in vals {
+                    for tok in v.split_whitespace() {
+                        let t = tok.trim();
+                        if !t.is_empty() {
+                            let ts = t.to_string();
+                            if seen.insert(ts.clone()) {
+                                rules.push(ts);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(rules)
+    }
+
     pub async fn close(&mut self) {
         let _ = self.ldap_handler.unbind().await;
     }

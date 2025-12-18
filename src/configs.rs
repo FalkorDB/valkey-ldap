@@ -106,6 +106,24 @@ lazy_static! {
     pub static ref LDAP_FAILURE_DETECTOR_INTERVAL: ValkeyGILGuard<i64> = ValkeyGILGuard::new(1);
     pub static ref LDAP_TIMEOUT_CONNECTION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(10);
     pub static ref LDAP_TIMEOUT_LDAP_OPERATION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(10);
+    // Group/authorization configs
+    pub static ref LDAP_GROUPS_SEARCH_BASE: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, ""));
+    pub static ref LDAP_GROUPS_FILTER: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, "objectClass=groupOfNames"));
+    pub static ref LDAP_GROUPS_MEMBER_ATTRIBUTE: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, "member"));
+    pub static ref LDAP_GROUPS_NAME_ATTRIBUTE: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, "cn"));
+    pub static ref LDAP_GROUPS_RULES_ATTRIBUTE: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, "valkeyACL"));
+    pub static ref LDAP_GROUP_TO_ACL_USER_MAP: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, ""));
+    // Dynamic ACL sync: map LDAP groups to ACL rule fragments, and default rules
+    pub static ref LDAP_GROUP_TO_ACL_RULES_MAP: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, ""));
+    pub static ref LDAP_DEFAULT_ACL_RULES: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, "on resetpass"));
 }
 
 pub fn refresh_ldap_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
@@ -120,6 +138,11 @@ pub fn refresh_ldap_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
         get_search_bind_passwd(ctx),
         get_search_dn_attribute(ctx),
         get_timeout_ldap_operation(ctx),
+        get_groups_search_base(ctx),
+        get_groups_filter(ctx),
+        get_groups_member_attribute(ctx),
+        get_groups_name_attribute(ctx),
+        get_groups_rules_attribute(ctx),
     );
     vkldap::refresh_ldap_settings(settings);
 }
@@ -319,6 +342,85 @@ pub fn get_search_bind_passwd<T: ValkeyLockIndicator>(ctx: &T) -> Option<String>
 pub fn get_search_dn_attribute<T: ValkeyLockIndicator>(ctx: &T) -> String {
     let dn_attribute = LDAP_SEARCH_DN_ATTRIBUTE.lock(ctx);
     dn_attribute.to_string()
+}
+
+pub fn get_groups_search_base<T: ValkeyLockIndicator>(ctx: &T) -> Option<String> {
+    // If empty, fall back to user search base
+    let base = LDAP_GROUPS_SEARCH_BASE.lock(ctx);
+    let base_str = base.to_string();
+    match base_str.as_str() {
+        "" => get_search_base(ctx),
+        _ => Some(base_str),
+    }
+}
+
+pub fn get_groups_filter<T: ValkeyLockIndicator>(ctx: &T) -> Option<String> {
+    let filter = LDAP_GROUPS_FILTER.lock(ctx);
+    let fstr = filter.to_string();
+    match fstr.as_str() {
+        "" => None,
+        _ => Some(fstr),
+    }
+}
+
+pub fn get_groups_member_attribute<T: ValkeyLockIndicator>(ctx: &T) -> String {
+    let attr = LDAP_GROUPS_MEMBER_ATTRIBUTE.lock(ctx);
+    attr.to_string()
+}
+
+pub fn get_groups_name_attribute<T: ValkeyLockIndicator>(ctx: &T) -> String {
+    let attr = LDAP_GROUPS_NAME_ATTRIBUTE.lock(ctx);
+    attr.to_string()
+}
+
+pub fn get_groups_rules_attribute<T: ValkeyLockIndicator>(ctx: &T) -> String {
+    let attr = LDAP_GROUPS_RULES_ATTRIBUTE.lock(ctx);
+    attr.to_string()
+}
+
+pub fn get_group_acl_user_map<T: ValkeyLockIndicator>(ctx: &T) -> Vec<(String, String)> {
+    // Format: "group1=acluser1,group2=acluser2"
+    let map_guard = LDAP_GROUP_TO_ACL_USER_MAP.lock(ctx);
+    let map_str = map_guard.to_string();
+    let mut res = Vec::new();
+    for pair in map_str.split(',') {
+        let p = pair.trim();
+        if p.is_empty() { continue; }
+        if let Some((g, u)) = p.split_once('=') {
+            res.push((g.trim().to_string(), u.trim().to_string()))
+        }
+    }
+    res
+}
+
+pub fn get_group_acl_rules_map<T: ValkeyLockIndicator>(ctx: &T) -> Vec<(String, Vec<String>)> {
+    // Format: "group1=+@read ~ns:* , group2=+@all"
+    let map_guard = LDAP_GROUP_TO_ACL_RULES_MAP.lock(ctx);
+    let map_str = map_guard.to_string();
+    let mut res = Vec::new();
+    for pair in map_str.split(',') {
+        let p = pair.trim();
+        if p.is_empty() { continue; }
+        if let Some((g, rules_str)) = p.split_once('=') {
+            let tokens: Vec<String> = rules_str
+                .split_whitespace()
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty())
+                .collect();
+            res.push((g.trim().to_string(), tokens));
+        }
+    }
+    res
+}
+
+pub fn get_default_acl_rules<T: ValkeyLockIndicator>(ctx: &T) -> Vec<String> {
+    let rules_guard = LDAP_DEFAULT_ACL_RULES.lock(ctx);
+    let rules = rules_guard.to_string();
+    rules
+        .split_whitespace()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect()
 }
 
 pub fn get_connection_pool_size<T: ValkeyLockIndicator>(ctx: &T) -> usize {

@@ -91,3 +91,87 @@ where
         data,
     )
 }
+
+pub fn vk_ldap_bind_and_groups<C, T>(
+    username: String,
+    password: String,
+    callback: C,
+    data: T,
+) -> Result<()>
+where
+    T: 'static + Send,
+    C: CallbackTrait<T, Result<Vec<String>>>,
+{
+    if !scheduler::is_scheduler_ready() {
+        return Ok(());
+    }
+
+    scheduler::submit_async_task(
+        context::ldap_bind_and_groups(username, password),
+        callback,
+        data,
+    )
+}
+
+pub fn vk_ldap_search_bind_and_groups<C, T>(
+    username: String,
+    password: String,
+    callback: C,
+    data: T,
+) -> Result<()>
+where
+    T: 'static + Send,
+    C: CallbackTrait<T, Result<Vec<String>>>,
+{
+    if !scheduler::is_scheduler_ready() {
+        return Ok(());
+    }
+
+    scheduler::submit_async_task(
+        context::ldap_search_bind_and_groups(username, password),
+        callback,
+        data,
+    )
+}
+
+pub fn vk_ldap_bind_and_group_rules<C, T>(
+    username: String,
+    password: String,
+    callback: C,
+    data: T,
+) -> Result<()>
+where
+    T: 'static + Send,
+    C: CallbackTrait<T, Result<Vec<String>>>,
+{
+    if !scheduler::is_scheduler_ready() {
+        return Ok(());
+    }
+
+    scheduler::submit_async_task(
+        context::ldap_bind_and_group_rules(username, password),
+        callback,
+        data,
+    )
+}
+
+pub fn vk_ldap_search_bind_and_group_rules<C, T>(
+    username: String,
+    password: String,
+    callback: C,
+    data: T,
+) -> Result<()>
+where
+    T: 'static + Send,
+    C: CallbackTrait<T, Result<Vec<String>>>,
+{
+    if !scheduler::is_scheduler_ready() {
+        return Ok(());
+    }
+
+    scheduler::submit_async_task(
+        context::ldap_search_bind_and_group_rules(username, password),
+        callback,
+        data,
+    )
+}

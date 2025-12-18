@@ -26,6 +26,12 @@ pub struct VkLdapSettings {
     pub search_bind_passwd: Option<String>,
     pub search_dn_attribute: String,
     pub timeout_ldap_operation: Duration,
+    // Group/authorization related settings
+    pub groups_search_base: Option<String>,
+    pub groups_filter: Option<String>,
+    pub groups_member_attribute: String,
+    pub groups_name_attribute: String,
+    pub groups_rules_attribute: String,
 }
 
 impl VkLdapSettings {
@@ -40,6 +46,11 @@ impl VkLdapSettings {
         search_bind_passwd: Option<String>,
         search_dn_attribute: String,
         timeout_ldap_operation: Duration,
+        groups_search_base: Option<String>,
+        groups_filter: Option<String>,
+        groups_member_attribute: String,
+        groups_name_attribute: String,
+        groups_rules_attribute: String,
     ) -> Self {
         Self {
             bind_db_prefix,
@@ -52,6 +63,11 @@ impl VkLdapSettings {
             search_bind_passwd,
             search_dn_attribute,
             timeout_ldap_operation,
+            groups_search_base,
+            groups_filter,
+            groups_member_attribute,
+            groups_name_attribute,
+            groups_rules_attribute,
         }
     }
 }
@@ -69,6 +85,11 @@ impl Default for VkLdapSettings {
             search_bind_passwd: Default::default(),
             search_dn_attribute: Default::default(),
             timeout_ldap_operation: Default::default(),
+            groups_search_base: Default::default(),
+            groups_filter: Default::default(),
+            groups_member_attribute: "member".to_string(),
+            groups_name_attribute: "cn".to_string(),
+            groups_rules_attribute: "valkeyACL".to_string(),
         }
     }
 }

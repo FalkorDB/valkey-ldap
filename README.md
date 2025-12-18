@@ -26,6 +26,45 @@ Once the user has been found in this search, the module re-binds to the LDAP dir
 
 This mode allows for significantly more flexibility in where the user objects are located in the directory, but will cause two additional requests to the LDAP server to be made.
 
+## LDAP-Based Authorization
+
+In addition to authentication, the module supports authorization backed by LDAP.
+
+Two approaches are available:
+
+- Legacy mapping to ACL users: Map LDAP groups to Valkey ACL user names via `ldap.group_acl_user_map` (comma-separated `group=acluser`). After successful bind, the client is authenticated as the mapped ACL user.
+- Dynamic ACL rule sync (recommended): Read ACL rule tokens directly from LDAP group entries and apply them with `ACL SETUSER` at login. The client is authenticated as the Valkey user with the same name as the LDAP username; rules are provisioned automatically.
+
+### Dynamic ACL Rule Sync
+
+After a successful LDAP bind, the module searches group entries matching the user DN and reads rule tokens from a configurable attribute on each group. All tokens are merged (duplicates deduplicated) and combined with module defaults. The resulting set is applied via `ACL SETUSER <username> <rules...>` before the client is authenticated.
+
+- `ldap.groups_rules_attribute`: LDAP attribute on group entries containing space-delimited ACL rule tokens. Default: `valkeyACL`.
+- `ldap.default_acl_rules`: Module-level default tokens always applied. Default: `on resetpass`.
+- Group search controls: `ldap.groups_search_base` (fallback to `ldap.search_base`), `ldap.groups_filter` (default `objectClass=groupOfNames`), `ldap.groups_member_attribute` (default `member`).
+
+Example group entry attributes:
+
+```
+dn: cn=appdev-team,ou=groups,dc=example,dc=com
+objectClass: groupOfNames
+cn: appdev-team
+member: cn=bob,ou=users,dc=example,dc=com
+valkeyACL: +@read ~proj:app:* -@dangerous
+```
+
+Resulting user rules (assuming defaults `on resetpass`):
+
+```
+ACL SETUSER bob on resetpass +@read ~proj:app:* -@dangerous
+```
+
+Notes:
+
+- Tokens from all matched groups are merged; duplicates are removed.
+- If the LDAP attribute is missing or empty, only `ldap.default_acl_rules` are applied.
+- You do not need to pre-create complex ACL users or update server-side ACLs manually; rules are provisioned at login.
+
 ## Setting Up Valkey Users
 
 As mentioned before, this module requires that user accounts must exist in Valkey in order to authenticate LDAP users. This restriction is necessary because the ACL rules for each LDAP user are stored in the Valkey user account.
@@ -88,6 +127,38 @@ After creating the above user `bob` in Valkey, it will only be possible to authe
 | `ldap.failure_detector_interval` | number | `1` | The number of seconds between each iteration of the failure detector. |
 | `ldap.timeout_connection` | number | `10` | The number of seconds for to wait when connection to an LDAP server before timing out. |
 | `ldap.timeout_ldap_operation` | number | `10` | The number of seconds for to wait for an LDAP operation before timing out. |
+| `ldap.group_acl_user_map` | string | `""` | Comma-separated LDAP group to Valkey ACL user mapping (`group=acluser`). (Legacy approach; use dynamic ACL rule sync below for most cases.) |
+| `ldap.groups_search_base` | string | `""` | DN for group search; defaults to `ldap.search_base` when unset. |
+| `ldap.groups_filter` | string | `"objectClass=groupOfNames"` | LDAP filter used when searching for groups. |
+| `ldap.groups_member_attribute` | string | `"member"` | LDAP attribute in the group entry that references the user DN. |
+| `ldap.groups_name_attribute` | string | `"cn"` | LDAP attribute in the group entry that is used as the group name for mapping. |
+| `ldap.groups_rules_attribute` | string | `"valkeyACL"` | LDAP attribute on group entries containing space-delimited ACL rule tokens applied to the user at login. |
+| `ldap.default_acl_rules` | string | `"on resetpass"` | Default ACL rule tokens always applied alongside LDAP-provided tokens. |
+
+### Quick Setup: Dynamic ACL Rule Sync
+
+Minimal steps to enable LDAP-backed authorization without manual ACL management:
+
+```bash
+# Configure where to search for users and groups (examples)
+CONFIG SET ldap.search_base "ou=users,dc=example,dc=com"
+CONFIG SET ldap.groups_search_base "ou=groups,dc=example,dc=com"
+
+# Set group filter and attributes (defaults shown)
+CONFIG SET ldap.groups_filter "objectClass=groupOfNames"
+CONFIG SET ldap.groups_member_attribute "member"
+CONFIG SET ldap.groups_rules_attribute "valkeyACL"
+
+# Ensure default rules include disabling local passwords
+CONFIG SET ldap.default_acl_rules "on resetpass"
+
+# Create the Valkey user (no local password)
+ACL SETUSER bob on resetpass
+
+# Authenticate: module binds to LDAP, reads group tokens,
+# applies ACL rules dynamically, and authenticates the client
+AUTH bob <ldap-password>
+```
 
 ## Installation
 

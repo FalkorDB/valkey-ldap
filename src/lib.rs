@@ -195,6 +195,62 @@ valkey_module! {
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
+            [
+                "groups_search_base",
+                &*configs::LDAP_GROUPS_SEARCH_BASE,
+                "",
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                "groups_filter",
+                &*configs::LDAP_GROUPS_FILTER,
+                "objectClass=groupOfNames",
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                "groups_member_attribute",
+                &*configs::LDAP_GROUPS_MEMBER_ATTRIBUTE,
+                "member",
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                "groups_name_attribute",
+                &*configs::LDAP_GROUPS_NAME_ATTRIBUTE,
+                "cn",
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                "groups_rules_attribute",
+                &*configs::LDAP_GROUPS_RULES_ATTRIBUTE,
+                "valkeyACL",
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                "group_acl_user_map",
+                &*configs::LDAP_GROUP_TO_ACL_USER_MAP,
+                "",
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                "group_acl_rules_map",
+                &*configs::LDAP_GROUP_TO_ACL_RULES_MAP,
+                "",
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                "default_acl_rules",
+                &*configs::LDAP_DEFAULT_ACL_RULES,
+                "on resetpass",
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
+            ],
         ],
         bool: [
             [
