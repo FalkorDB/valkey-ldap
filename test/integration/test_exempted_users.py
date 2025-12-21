@@ -19,7 +19,7 @@ class ExemptedUsersTest(TestCase):
     def test_exempted_user_uses_local_auth(self):
         """Test that exempted users bypass LDAP and use local authentication"""
         # Create a local user with password
-        self.client.execute_command('ACL', 'SETUSER', 'exporter', 'on', '>localpassword', '+@read', '~*')
+        self.client.execute_command('ACL', 'SETUSER', 'exporter', 'ON', '>localpassword', '+@all', '~*')
         
         # Set exemption pattern to match 'exporter'
         self.client.config_set('ldap.exempted_users_regex', '^exporter$')
@@ -58,9 +58,9 @@ class ExemptedUsersTest(TestCase):
     def test_multiple_exempted_users_regex(self):
         """Test regex pattern matching multiple users"""
         # Create multiple local users
-        self.client.execute_command('ACL', 'SETUSER', 'default', 'on', '>adminpass', '+@all', '~*')
-        self.client.execute_command('ACL', 'SETUSER', 'exporter', 'on', '>exporterpass', '+@read', '~*')
-        self.client.execute_command('ACL', 'SETUSER', 'replication', 'on', '>replpass', '+@all', '~*')
+        self.client.execute_command('ACL', 'SETUSER', 'default', 'ON', '>adminpass', '+@all', '~*')
+        self.client.execute_command('ACL', 'SETUSER', 'exporter', 'ON', '>exporterpass', '+@all', '~*')
+        self.client.execute_command('ACL', 'SETUSER', 'replication', 'ON', '>replpass', '+@all', '~*')
         
         # Set exemption pattern to match all three
         self.client.config_set('ldap.exempted_users_regex', '^(default|exporter|replication)$')
@@ -79,8 +79,8 @@ class ExemptedUsersTest(TestCase):
     def test_exemption_pattern_prefix(self):
         """Test regex pattern with prefix matching"""
         # Create users with prefix
-        self.client.execute_command('ACL', 'SETUSER', 'metrics-reader', 'on', '>pass1', '+@read', '~*')
-        self.client.execute_command('ACL', 'SETUSER', 'metrics-writer', 'on', '>pass2', '+@write', '~*')
+        self.client.execute_command('ACL', 'SETUSER', 'metrics-reader', 'ON', '>pass1', '+@all', '~*')
+        self.client.execute_command('ACL', 'SETUSER', 'metrics-writer', 'ON', '>pass2', '+@all', '~*')
         
         # Set exemption pattern to match 'metrics-*' prefix
         self.client.config_set('ldap.exempted_users_regex', '^metrics-.*$')

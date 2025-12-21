@@ -52,8 +52,8 @@ class LdapTestCase(TestCase):
         vk.execute_command("CONFIG", "SET", "ldap.use_starttls", "no")
 
         # Add users in Valkey
-        vk.execute_command("ACL", "SETUSER", "user1", "ON", ">pass", "allcommands")
-        vk.execute_command("ACL", "SETUSER", "u2", "ON", ">pass", "allcommands")
+        vk.execute_command("ACL", "SETUSER", "user1", "ON", ">pass", "allcommands", "allkeys")
+        vk.execute_command("ACL", "SETUSER", "u2", "ON", ">pass", "allcommands", "allkeys")
 
         self.vk = vk
 
@@ -114,5 +114,5 @@ def setup_ldap_users(client):
     
     # Add LDAP users to ACL (they will authenticate via LDAP)
     # Based on test/ldap_users.txt, we have user1 and user2 (u2)
-    client.execute_command("ACL", "SETUSER", "user1", "ON", "nopass", "allcommands", "allkeys")
-    client.execute_command("ACL", "SETUSER", "u2", "ON", "nopass", "allcommands", "allkeys")
+    client.execute_command("ACL", "SETUSER", "user1", "ON", "nopass", "+@all", "~*")
+    client.execute_command("ACL", "SETUSER", "u2", "ON", "nopass", "+@all", "~*")
