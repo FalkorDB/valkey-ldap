@@ -43,17 +43,17 @@ class ExemptedUsersTest(TestCase):
         # Set exemption pattern that doesn't match normal LDAP users
         self.client.config_set('ldap.exempted_users_regex', '^(default|exporter)$')
         
-        # LDAP user 'alice' should still authenticate via LDAP
-        alice_client = valkey.Valkey(
+        # LDAP user 'user1' should still authenticate via LDAP
+        user1_client = valkey.Valkey(
             host='localhost',
             port=6379,
-            username='alice',
-            password='password',
+            username='user1',
+            password='user1@123',
             decode_responses=True
         )
         
         # Should be able to ping
-        self.assertTrue(alice_client.ping())
+        self.assertTrue(user1_client.ping())
         
     def test_multiple_exempted_users_regex(self):
         """Test regex pattern matching multiple users"""
