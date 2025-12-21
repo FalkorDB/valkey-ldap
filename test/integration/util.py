@@ -84,15 +84,17 @@ def parse_valkey_info_section(section: str) -> dict:
 
 
 def clean_acl(client):
-    """Remove all users except default from ACL"""
+    """Remove all users except default and pre-configured LDAP users from ACL"""
     acl_list = client.execute_command("ACL", "LIST")
+    # Preserve default and the LDAP users defined in valkey.conf (user1, u2)
+    preserve_users = {"default", "user1", "u2"}
     for user_line in acl_list:
         # Parse username from ACL LIST output (format: "user <username> ...")
         parts = user_line.split()
         if len(parts) >= 2 and parts[0] == "user":
             username = parts[1]
-            # Don't delete the default user
-            if username != "default":
+            # Don't delete preserved users
+            if username not in preserve_users:
                 try:
                     client.execute_command("ACL", "DELUSER", username)
                 except Exception:
@@ -101,8 +103,8 @@ def clean_acl(client):
 
 
 def setup_ldap_users(client):
-    """Setup LDAP users in Valkey for testing"""
-    # Configure LDAP settings for testing
+    """Setup LDAP configuration for testing"""
+    # Configure LDAP settings for testing (switch to search_and_bind mode)
     client.execute_command("CONFIG", "SET", "ldap.servers", "ldap://ldap ldap://ldap-2")
     client.execute_command("CONFIG", "SET", "ldap.auth_mode", "search_and_bind")
     client.execute_command("CONFIG", "SET", "ldap.search_base", "dc=valkey,dc=io")
@@ -112,7 +114,5 @@ def setup_ldap_users(client):
     client.execute_command("CONFIG", "SET", "ldap.tls_key_path", "/valkey-ldap/valkey-ldap-client.key")
     client.execute_command("CONFIG", "SET", "ldap.use_starttls", "no")
     
-    # Add LDAP users to ACL (they will authenticate via LDAP)
-    # Based on test/ldap_users.txt, we have user1 and user2 (u2)
-    client.execute_command("ACL", "SETUSER", "user1", "ON", "nopass", "+@all", "~*")
-    client.execute_command("ACL", "SETUSER", "u2", "ON", "nopass", "+@all", "~*")
+    # Users user1 and u2 are already defined in valkey.conf
+    # No need to recreate them
