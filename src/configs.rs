@@ -386,6 +386,7 @@ pub fn get_groups_rules_attribute<T: ValkeyLockIndicator>(ctx: &T) -> String {
     attr.to_string()
 }
 
+#[allow(dead_code)]
 pub fn get_group_acl_user_map<T: ValkeyLockIndicator>(ctx: &T) -> Vec<(String, String)> {
     // Format: "group1=acluser1,group2=acluser2"
     let map_guard = LDAP_GROUP_TO_ACL_USER_MAP.lock(ctx);
@@ -403,6 +404,7 @@ pub fn get_group_acl_user_map<T: ValkeyLockIndicator>(ctx: &T) -> Vec<(String, S
     res
 }
 
+#[allow(dead_code)]
 pub fn get_group_acl_rules_map<T: ValkeyLockIndicator>(ctx: &T) -> Vec<(String, Vec<String>)> {
     // Format: "group1=+@read ~ns:* , group2=+@all"
     let map_guard = LDAP_GROUP_TO_ACL_RULES_MAP.lock(ctx);
@@ -455,6 +457,7 @@ pub fn get_timeout_ldap_operation<T: ValkeyLockIndicator>(ctx: &T) -> Duration {
     Duration::from_secs(*timeout as u64)
 }
 
+#[allow(dead_code)]
 pub fn get_exempted_users_regex_pattern<T: ValkeyLockIndicator>(ctx: &T) -> String {
     let pattern = LDAP_EXEMPTED_USERS_REGEX.lock(ctx);
     pattern.to_string()

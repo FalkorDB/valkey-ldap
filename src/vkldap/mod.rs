@@ -59,6 +59,7 @@ pub fn get_servers_health_status() -> Result<Vec<VkLdapServer>> {
     scheduler::submit_sync_task(context::get_servers_health_status())
 }
 
+#[allow(dead_code)]
 pub fn vk_ldap_bind<C, T>(username: String, password: String, callback: C, data: T) -> Result<()>
 where
     T: 'static + Send,
@@ -71,6 +72,7 @@ where
     scheduler::submit_async_task(context::ldap_bind(username, password), callback, data)
 }
 
+#[allow(dead_code)]
 pub fn vk_ldap_search_and_bind<C, T>(
     username: String,
     password: String,
@@ -92,6 +94,7 @@ where
     )
 }
 
+#[allow(dead_code)]
 pub fn vk_ldap_bind_and_groups<C, T>(
     username: String,
     password: String,
@@ -113,6 +116,7 @@ where
     )
 }
 
+#[allow(dead_code)]
 pub fn vk_ldap_search_bind_and_groups<C, T>(
     username: String,
     password: String,

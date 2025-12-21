@@ -348,6 +348,7 @@ impl VkLdapConnection {
         Ok(sentry.attrs[dn_attribute][0].clone())
     }
 
+    #[allow(dead_code)]
     pub async fn search_groups(
         &mut self,
         settings: &VkLdapSettings,

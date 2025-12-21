@@ -254,6 +254,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 pub(super) async fn ldap_bind(username: String, password: String) -> Result<()> {
     let settings = VK_LDAP_CONTEXT.lock().await.get_ldap_settings();
 
@@ -271,6 +272,7 @@ pub(super) async fn ldap_bind(username: String, password: String) -> Result<()> 
     .await
 }
 
+#[allow(dead_code)]
 pub(super) async fn ldap_search_and_bind(username: String, password: String) -> Result<()> {
     let settings = VK_LDAP_CONTEXT.lock().await.get_ldap_settings();
 
@@ -297,6 +299,7 @@ pub(super) async fn ldap_search_and_bind(username: String, password: String) -> 
     .await
 }
 
+#[allow(dead_code)]
 pub(super) async fn ldap_bind_and_groups(
     username: String,
     password: String,
@@ -330,6 +333,7 @@ pub(super) async fn ldap_bind_and_groups(
     Ok(guard.clone().unwrap_or_default())
 }
 
+#[allow(dead_code)]
 pub(super) async fn ldap_search_bind_and_groups(
     username: String,
     password: String,

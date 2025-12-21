@@ -30,6 +30,7 @@ pub struct VkLdapSettings {
     pub groups_search_base: Option<String>,
     pub groups_filter: Option<String>,
     pub groups_member_attribute: String,
+    #[allow(dead_code)]
     pub groups_name_attribute: String,
     pub groups_rules_attribute: String,
 }
