@@ -67,11 +67,18 @@ pub fn ldap_auth_blocking_callback(
         return Ok(AUTH_NOT_HANDLED);
     }
 
+    let user_str = username.to_string();
+    
+    // Check if the user is exempted from LDAP authentication
+    if configs::is_user_exempted_from_ldap(&user_str) {
+        debug!("user {user_str} is exempted from LDAP authentication");
+        return Ok(AUTH_NOT_HANDLED);
+    }
+
     debug!("starting authentication for user={username}");
 
     let use_bind_mode = configs::is_bind_mode(ctx);
 
-    let user_str = username.to_string();
     let pass_str = password.to_string();
 
     let blocked_client = ctx.block_client_on_auth(auth_reply_callback, Some(free_callback));

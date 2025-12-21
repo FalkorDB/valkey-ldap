@@ -1,7 +1,9 @@
 use std::collections::LinkedList;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use lazy_static::lazy_static;
+use regex::Regex;
 use valkey_module::{
     ConfigurationValue, ValkeyError, ValkeyGILGuard, ValkeyLockIndicator, ValkeyString,
     configuration::ConfigurationContext,
@@ -124,6 +126,12 @@ lazy_static! {
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
     pub static ref LDAP_DEFAULT_ACL_RULES: ValkeyGILGuard<ValkeyString> =
         ValkeyGILGuard::new(ValkeyString::create(None, "on resetpass"));
+    pub static ref LDAP_EXEMPTED_USERS_REGEX: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, ""));
+}
+
+lazy_static! {
+    static ref EXEMPTED_USERS_REGEX_CACHE: Mutex<Option<Regex>> = Mutex::new(None);
 }
 
 pub fn refresh_ldap_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
@@ -441,4 +449,51 @@ pub fn get_timeout_connection<T: ValkeyLockIndicator>(ctx: &T) -> Duration {
 pub fn get_timeout_ldap_operation<T: ValkeyLockIndicator>(ctx: &T) -> Duration {
     let timeout = LDAP_TIMEOUT_LDAP_OPERATION.lock(ctx);
     Duration::from_secs(*timeout as u64)
+}
+
+pub fn get_exempted_users_regex_pattern<T: ValkeyLockIndicator>(ctx: &T) -> String {
+    let pattern = LDAP_EXEMPTED_USERS_REGEX.lock(ctx);
+    pattern.to_string()
+}
+
+pub fn is_user_exempted_from_ldap(username: &str) -> bool {
+    let regex_guard = EXEMPTED_USERS_REGEX_CACHE.lock().unwrap();
+    if let Some(regex) = regex_guard.as_ref() {
+        regex.is_match(username)
+    } else {
+        false
+    }
+}
+
+pub fn exempted_users_regex_set_callback(
+    config_ctx: &ConfigurationContext,
+    _: &str,
+    value: &'static ValkeyGILGuard<ValkeyString>,
+) -> Result<(), ValkeyError> {
+    let pattern_str = value.get(config_ctx).to_string_lossy();
+    
+    // Empty pattern clears the exemption list
+    if pattern_str.is_empty() {
+        let mut cache = EXEMPTED_USERS_REGEX_CACHE.lock().unwrap();
+        *cache = None;
+        debug!("cleared exempted users regex pattern");
+        return Ok(());
+    }
+    
+    // Validate the regex pattern
+    match Regex::new(&pattern_str) {
+        Ok(regex) => {
+            let mut cache = EXEMPTED_USERS_REGEX_CACHE.lock().unwrap();
+            *cache = Some(regex);
+            debug!("set exempted users regex pattern: {}", pattern_str);
+            Ok(())
+        }
+        Err(err) => {
+            error!("invalid regex pattern '{}': {}", pattern_str, err);
+            Err(ValkeyError::String(format!(
+                "Invalid regex pattern: {}",
+                err
+            )))
+        }
+    }
 }

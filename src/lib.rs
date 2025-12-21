@@ -251,6 +251,14 @@ valkey_module! {
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
+            [
+                "exempted_users_regex",
+                &*configs::LDAP_EXEMPTED_USERS_REGEX,
+                "",
+                ConfigurationFlags::DEFAULT,
+                None,
+                Some(Box::new(configs::exempted_users_regex_set_callback))
+            ],
         ],
         bool: [
             [

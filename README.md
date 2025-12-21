@@ -81,6 +81,58 @@ ACL SET USER bob on resetpass +@hash
 
 After creating the above user `bob` in Valkey, it will only be possible to authenticate user `bob` with a successful authentication from the LDAP module.
 
+## Exempting Users from LDAP Authentication
+
+In some scenarios, certain users need to bypass LDAP authentication and use local Valkey authentication instead. Common examples include:
+
+- **Default super admin user**: Administrative access that shouldn't depend on LDAP availability
+- **Inter-node communication**: Replication and cluster communication users
+- **Monitoring and metrics**: Exporters and health check services that poll frequently
+- **Service accounts**: Automated tools and scripts that need reliable authentication
+
+### Why Exempt Users?
+
+Exempting high-frequency service accounts (like Redis exporters) from LDAP reduces load on the LDAP server and prevents potential crashes from excessive authentication requests. It also ensures critical services remain operational even if LDAP becomes unavailable.
+
+### Configuration
+
+Use the `ldap.exempted_users_regex` configuration to specify a regex pattern matching usernames that should bypass LDAP:
+
+```bash
+# Exempt specific users
+CONFIG SET ldap.exempted_users_regex "^(default|exporter|replication)$"
+
+# Exempt users with a prefix pattern
+CONFIG SET ldap.exempted_users_regex "^(admin|metrics-.*|repl-.*)$"
+
+# Clear exemptions (all users go through LDAP)
+CONFIG SET ldap.exempted_users_regex ""
+```
+
+**Important**: Exempted users must have local passwords configured in Valkey using `ACL SETUSER <username> >password` since they won't authenticate via LDAP.
+
+### Example Setup
+
+```bash
+# Create local users with passwords
+ACL SETUSER default on >supersecret +@all ~*
+ACL SETUSER exporter on >exporterpass +@read ~*
+ACL SETUSER replication on >replpass +@all ~*
+
+# Configure LDAP exemptions
+CONFIG SET ldap.exempted_users_regex "^(default|exporter|replication)$"
+
+# Regular LDAP users (no local password)
+ACL SETUSER bob on resetpass +@hash
+ACL SETUSER alice on resetpass +@read
+
+# Authenticate as exempted user (uses local password)
+AUTH default supersecret
+
+# Authenticate as LDAP user (uses LDAP password)
+AUTH bob ldap-password
+```
+
 
 ## Module Configuration
 
@@ -134,6 +186,7 @@ After creating the above user `bob` in Valkey, it will only be possible to authe
 | `ldap.groups_name_attribute` | string | `"cn"` | LDAP attribute in the group entry that is used as the group name for mapping. |
 | `ldap.groups_rules_attribute` | string | `"valkeyACL"` | LDAP attribute on group entries containing space-delimited ACL rule tokens applied to the user at login. |
 | `ldap.default_acl_rules` | string | `"on resetpass"` | Default ACL rule tokens always applied alongside LDAP-provided tokens. |
+| `ldap.exempted_users_regex` | string | `""` | Regex pattern to exempt certain users from LDAP authentication. Users matching this pattern will bypass LDAP and use local Valkey authentication. Useful for service accounts, monitoring users, and inter-node communication. Examples: `^(default|exporter|replication)$` or `^(admin\|metrics-.*)$`. |
 
 ### Quick Setup: Dynamic ACL Rule Sync
 
