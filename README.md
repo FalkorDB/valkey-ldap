@@ -109,7 +109,13 @@ CONFIG SET ldap.exempted_users_regex "^(admin|metrics-.*|repl-.*)$"
 CONFIG SET ldap.exempted_users_regex ""
 ```
 
-**Important**: Exempted users must have local passwords configured in Valkey using `ACL SETUSER <username> >password` since they won't authenticate via LDAP.
+**Important Notes:**
+
+1. **Local passwords required**: Exempted users must have local passwords configured in Valkey using `ACL SETUSER <username> >password` since they won't authenticate via LDAP.
+
+2. **Exemption takes precedence**: If a username matches the exemption pattern, LDAP is **never contacted** for that user, even if a user with the same name exists in LDAP. Only the local Valkey password will work.
+
+3. **Name conflicts**: To avoid confusion, use distinctive naming conventions for exempted users (e.g., `local-exporter`, `valkey-admin`) or ensure exempted usernames don't exist in your LDAP directory.
 
 ### Example Setup
 
