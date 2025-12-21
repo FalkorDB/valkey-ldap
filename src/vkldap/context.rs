@@ -261,7 +261,12 @@ pub(super) async fn ldap_bind(username: String, password: String) -> Result<()> 
         let prefix = settings.bind_db_prefix.clone();
         let suffix = settings.bind_db_suffix.clone();
         let user_dn = format!("{prefix}{username}{suffix}");
-        conn.bind(user_dn.as_str(), password.as_str(), settings.timeout_ldap_operation).await
+        conn.bind(
+            user_dn.as_str(),
+            password.as_str(),
+            settings.timeout_ldap_operation,
+        )
+        .await
     })
     .await
 }
@@ -292,7 +297,10 @@ pub(super) async fn ldap_search_and_bind(username: String, password: String) -> 
     .await
 }
 
-pub(super) async fn ldap_bind_and_groups(username: String, password: String) -> Result<Vec<String>> {
+pub(super) async fn ldap_bind_and_groups(
+    username: String,
+    password: String,
+) -> Result<Vec<String>> {
     let settings = VK_LDAP_CONTEXT.lock().await.get_ldap_settings();
 
     let groups_out: Arc<TokioMutex<Option<Vec<String>>>> = Arc::new(TokioMutex::new(None));
@@ -310,12 +318,9 @@ pub(super) async fn ldap_bind_and_groups(username: String, password: String) -> 
         )
         .await?;
         // Then fetch groups
-        let groups = conn.search_groups(
-            &settings,
-            user_dn.as_str(),
-            settings.timeout_ldap_operation,
-        )
-        .await?;
+        let groups = conn
+            .search_groups(&settings, user_dn.as_str(), settings.timeout_ldap_operation)
+            .await?;
         let mut guard = groups_out_cl.lock().await;
         *guard = Some(groups);
         Ok(())
@@ -325,7 +330,10 @@ pub(super) async fn ldap_bind_and_groups(username: String, password: String) -> 
     Ok(guard.clone().unwrap_or_default())
 }
 
-pub(super) async fn ldap_search_bind_and_groups(username: String, password: String) -> Result<Vec<String>> {
+pub(super) async fn ldap_search_bind_and_groups(
+    username: String,
+    password: String,
+) -> Result<Vec<String>> {
     let settings = VK_LDAP_CONTEXT.lock().await.get_ldap_settings();
 
     let groups_out: Arc<TokioMutex<Option<Vec<String>>>> = Arc::new(TokioMutex::new(None));
@@ -347,12 +355,9 @@ pub(super) async fn ldap_search_bind_and_groups(username: String, password: Stri
                     settings.timeout_ldap_operation,
                 )
                 .await?;
-                let groups = conn.search_groups(
-                    &settings,
-                    user_dn.as_str(),
-                    settings.timeout_ldap_operation,
-                )
-                .await?;
+                let groups = conn
+                    .search_groups(&settings, user_dn.as_str(), settings.timeout_ldap_operation)
+                    .await?;
                 let mut guard = groups_out_cl.lock().await;
                 *guard = Some(groups);
                 Ok(())
@@ -365,7 +370,10 @@ pub(super) async fn ldap_search_bind_and_groups(username: String, password: Stri
     Ok(guard.clone().unwrap_or_default())
 }
 
-pub(super) async fn ldap_bind_and_group_rules(username: String, password: String) -> Result<Vec<String>> {
+pub(super) async fn ldap_bind_and_group_rules(
+    username: String,
+    password: String,
+) -> Result<Vec<String>> {
     let settings = VK_LDAP_CONTEXT.lock().await.get_ldap_settings();
 
     let rules_out: Arc<TokioMutex<Option<Vec<String>>>> = Arc::new(TokioMutex::new(None));
@@ -383,12 +391,9 @@ pub(super) async fn ldap_bind_and_group_rules(username: String, password: String
         )
         .await?;
         // Then fetch rules
-        let rules = conn.search_groups_rules(
-            &settings,
-            user_dn.as_str(),
-            settings.timeout_ldap_operation,
-        )
-        .await?;
+        let rules = conn
+            .search_groups_rules(&settings, user_dn.as_str(), settings.timeout_ldap_operation)
+            .await?;
         let mut guard = rules_out_cl.lock().await;
         *guard = Some(rules);
         Ok(())
@@ -398,7 +403,10 @@ pub(super) async fn ldap_bind_and_group_rules(username: String, password: String
     Ok(guard.clone().unwrap_or_default())
 }
 
-pub(super) async fn ldap_search_bind_and_group_rules(username: String, password: String) -> Result<Vec<String>> {
+pub(super) async fn ldap_search_bind_and_group_rules(
+    username: String,
+    password: String,
+) -> Result<Vec<String>> {
     let settings = VK_LDAP_CONTEXT.lock().await.get_ldap_settings();
 
     let rules_out: Arc<TokioMutex<Option<Vec<String>>>> = Arc::new(TokioMutex::new(None));
@@ -420,12 +428,13 @@ pub(super) async fn ldap_search_bind_and_group_rules(username: String, password:
                     settings.timeout_ldap_operation,
                 )
                 .await?;
-                let rules = conn.search_groups_rules(
-                    &settings,
-                    user_dn.as_str(),
-                    settings.timeout_ldap_operation,
-                )
-                .await?;
+                let rules = conn
+                    .search_groups_rules(
+                        &settings,
+                        user_dn.as_str(),
+                        settings.timeout_ldap_operation,
+                    )
+                    .await?;
                 let mut guard = rules_out_cl.lock().await;
                 *guard = Some(rules);
                 Ok(())

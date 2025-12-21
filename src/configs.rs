@@ -393,7 +393,9 @@ pub fn get_group_acl_user_map<T: ValkeyLockIndicator>(ctx: &T) -> Vec<(String, S
     let mut res = Vec::new();
     for pair in map_str.split(',') {
         let p = pair.trim();
-        if p.is_empty() { continue; }
+        if p.is_empty() {
+            continue;
+        }
         if let Some((g, u)) = p.split_once('=') {
             res.push((g.trim().to_string(), u.trim().to_string()))
         }
@@ -408,7 +410,9 @@ pub fn get_group_acl_rules_map<T: ValkeyLockIndicator>(ctx: &T) -> Vec<(String, 
     let mut res = Vec::new();
     for pair in map_str.split(',') {
         let p = pair.trim();
-        if p.is_empty() { continue; }
+        if p.is_empty() {
+            continue;
+        }
         if let Some((g, rules_str)) = p.split_once('=') {
             let tokens: Vec<String> = rules_str
                 .split_whitespace()
@@ -471,7 +475,7 @@ pub fn exempted_users_regex_set_callback(
     value: &'static ValkeyGILGuard<ValkeyString>,
 ) -> Result<(), ValkeyError> {
     let pattern_str = value.get(config_ctx).to_string_lossy();
-    
+
     // Empty pattern clears the exemption list
     if pattern_str.is_empty() {
         let mut cache = EXEMPTED_USERS_REGEX_CACHE.lock().unwrap();
@@ -479,7 +483,7 @@ pub fn exempted_users_regex_set_callback(
         debug!("cleared exempted users regex pattern");
         return Ok(());
     }
-    
+
     // Validate the regex pattern
     match Regex::new(&pattern_str) {
         Ok(regex) => {

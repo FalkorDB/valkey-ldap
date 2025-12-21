@@ -401,7 +401,9 @@ impl VkLdapConnection {
         for entry in rs.into_iter() {
             let sentry = SearchEntry::construct(entry);
             if let Some(vals) = sentry.attrs.get(name_attr) {
-                for v in vals { groups.push(v.clone()); }
+                for v in vals {
+                    groups.push(v.clone());
+                }
             }
         }
         Ok(groups)

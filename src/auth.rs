@@ -68,7 +68,7 @@ pub fn ldap_auth_blocking_callback(
     }
 
     let user_str = username.to_string();
-    
+
     // Check if the user is exempted from LDAP authentication
     if configs::is_user_exempted_from_ldap(&user_str) {
         debug!("user {user_str} is exempted from LDAP authentication");
@@ -83,13 +83,14 @@ pub fn ldap_auth_blocking_callback(
 
     let blocked_client = ctx.block_client_on_auth(auth_reply_callback, Some(free_callback));
 
-    let callback = move |blocked_client: Option<BlockedClient<Result<Vec<String>, VkLdapError>>>, result| {
-        assert!(blocked_client.is_some());
-        let mut blocked_client = blocked_client.unwrap();
-        if let Err(e) = blocked_client.set_blocked_private_data(result) {
-            error!("failed to set the auth callback result: {e}");
-        }
-    };
+    let callback =
+        move |blocked_client: Option<BlockedClient<Result<Vec<String>, VkLdapError>>>, result| {
+            assert!(blocked_client.is_some());
+            let mut blocked_client = blocked_client.unwrap();
+            if let Err(e) = blocked_client.set_blocked_private_data(result) {
+                error!("failed to set the auth callback result: {e}");
+            }
+        };
 
     let res = if use_bind_mode {
         vkldap::vk_ldap_bind_and_group_rules(user_str, pass_str, callback, blocked_client)
