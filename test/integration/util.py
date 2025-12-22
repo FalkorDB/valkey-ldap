@@ -104,15 +104,32 @@ def clean_acl(client):
 
 def setup_ldap_users(client):
     """Setup LDAP configuration for testing"""
-    # Configure LDAP settings for testing (switch to search_and_bind mode)
+    # Configure LDAP settings for testing (switch to search+bind mode)
     client.execute_command("CONFIG", "SET", "ldap.servers", "ldap://ldap ldap://ldap-2")
-    client.execute_command("CONFIG", "SET", "ldap.auth_mode", "search_and_bind")
+    client.execute_command("CONFIG", "SET", "ldap.auth_mode", "search+bind")
+    
+    # Clear bind mode settings to avoid conflicts
+    client.execute_command("CONFIG", "SET", "ldap.bind_dn_prefix", "")
+    client.execute_command("CONFIG", "SET", "ldap.bind_dn_suffix", "")
+    
+    # Set search+bind mode settings
+    # The search_filter and search_attribute work together: filter is applied, then attribute is checked
+    # For user1 (has cn but no uid), we need to search by cn
     client.execute_command("CONFIG", "SET", "ldap.search_base", "dc=valkey,dc=io")
-    client.execute_command("CONFIG", "SET", "ldap.search_filter", "(|(cn=%u)(uid=%u))")
+    client.execute_command("CONFIG", "SET", "ldap.search_filter", "objectClass=*")
+    client.execute_command("CONFIG", "SET", "ldap.search_attribute", "cn")
+    client.execute_command("CONFIG", "SET", "ldap.search_bind_dn", "cn=admin,dc=valkey,dc=io")
+    client.execute_command("CONFIG", "SET", "ldap.search_bind_passwd", "admin123!")
+    
+    # TLS configuration
     client.execute_command("CONFIG", "SET", "ldap.tls_ca_cert_path", "/valkey-ldap/valkey-ldap-ca.crt")
     client.execute_command("CONFIG", "SET", "ldap.tls_cert_path", "/valkey-ldap/valkey-ldap-client.crt")
     client.execute_command("CONFIG", "SET", "ldap.tls_key_path", "/valkey-ldap/valkey-ldap-client.key")
     client.execute_command("CONFIG", "SET", "ldap.use_starttls", "no")
+    
+    # Users user1 and u2 are already defined in valkey.conf
+    # No need to recreate them
+
     
     # Users user1 and u2 are already defined in valkey.conf
     # No need to recreate them
