@@ -8,7 +8,15 @@ class ExemptedUsersTest(TestCase):
     """Test cases for exempted users regex feature"""
 
     def setUp(self):
-        self.client = valkey.Valkey(host='localhost', port=6379, db=0, decode_responses=True)
+        # Try to connect without auth first, if that fails, try with user1 credentials
+        try:
+            self.client = valkey.Valkey(host='localhost', port=6379, db=0, decode_responses=True, socket_connect_timeout=2)
+            # Test if connection works
+            self.client.ping()
+        except:
+            # If unauthenticated connection fails, try with user1 (LDAP user)
+            self.client = valkey.Valkey(host='localhost', port=6379, db=0, decode_responses=True, username='user1', password='pass')
+        
         clean_acl(self.client)
 
     def tearDown(self):
