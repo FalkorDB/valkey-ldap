@@ -52,8 +52,8 @@ class LdapTestCase(TestCase):
         vk.execute_command("CONFIG", "SET", "ldap.use_starttls", "no")
 
         # Add users in Valkey
-        vk.execute_command("ACL", "SETUSER", "user1", "ON", ">pass", "allcommands")
-        vk.execute_command("ACL", "SETUSER", "u2", "ON", ">pass", "allcommands")
+        vk.execute_command("ACL", "SETUSER", "user1", "ON", ">pass", "+@all", "~*")
+        vk.execute_command("ACL", "SETUSER", "u2", "ON", ">pass", "+@all", "~*")
 
         self.vk = vk
 
