@@ -161,12 +161,18 @@ pub async fn reset_context() {
 }
 
 pub async fn refresh_ldap_settings(settings: VkLdapSettings) {
-    debug!("refreshing LDAP settings: search_base={:?}", settings.search_base);
+    debug!(
+        "refreshing LDAP settings: search_base={:?}",
+        settings.search_base
+    );
     VK_LDAP_CONTEXT.lock().await.refresh_ldap_settings(settings);
 }
 
 pub fn refresh_ldap_settings_blocking(settings: VkLdapSettings) {
-    debug!("refreshing LDAP settings (blocking): search_base={:?}", settings.search_base);
+    debug!(
+        "refreshing LDAP settings (blocking): search_base={:?}",
+        settings.search_base
+    );
     // Use try_lock to avoid deadlock - this is called during initialization when no other tasks are running
     if let Ok(mut ctx) = VK_LDAP_CONTEXT.try_lock() {
         ctx.refresh_ldap_settings(settings);

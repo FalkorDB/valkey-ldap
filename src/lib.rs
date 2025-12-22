@@ -33,7 +33,7 @@ fn initializer(ctx: &Context, _args: &[ValkeyString]) -> Status {
         std::thread::sleep(std::time::Duration::from_millis(10));
         attempts += 1;
     }
-    
+
     if !scheduler::is_scheduler_ready() {
         ctx.log_warning("scheduler not ready after timeout");
         return Status::Err;
