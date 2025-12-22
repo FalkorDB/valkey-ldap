@@ -45,6 +45,9 @@ class LdapModuleBindTest(LdapTestCase):
         self.vk.execute_command("CONFIG", "SET", "ldap.auth_mode", "bind")
 
         self.vk.execute_command(
+            "CONFIG", "SET", "ldap.bind_dn_prefix", "cn="
+        )
+        self.vk.execute_command(
             "CONFIG", "SET", "ldap.bind_dn_suffix", ",OU=devops,DC=valkey,DC=io"
         )
 

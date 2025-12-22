@@ -53,6 +53,8 @@ class LdapTestCase(TestCase):
 
         # Set search base for group rules search (needed even in bind mode)
         vk.execute_command("CONFIG", "SET", "ldap.search_base", "dc=valkey,dc=io")
+        vk.execute_command("CONFIG", "SET", "ldap.search_bind_dn", "cn=admin,dc=valkey,dc=io")
+        vk.execute_command("CONFIG", "SET", "ldap.search_bind_passwd", "admin123!")
 
         # Add users in Valkey
         vk.execute_command("ACL", "SETUSER", "user1", "ON", ">pass", "allcommands", "allkeys")
