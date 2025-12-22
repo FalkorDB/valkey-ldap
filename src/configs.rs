@@ -155,6 +155,27 @@ pub fn refresh_ldap_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
     vkldap::refresh_ldap_settings(settings);
 }
 
+pub fn refresh_ldap_settings_cache_blocking<T: ValkeyLockIndicator>(ctx: &T) {
+    let settings = VkLdapSettings::new(
+        get_bind_dn_prefix(ctx),
+        get_bind_dn_suffix(ctx),
+        get_search_base(ctx),
+        get_search_scope(ctx),
+        get_search_filter(ctx),
+        get_search_attribute(ctx),
+        get_search_bind_dn(ctx),
+        get_search_bind_passwd(ctx),
+        get_search_dn_attribute(ctx),
+        get_timeout_ldap_operation(ctx),
+        get_groups_search_base(ctx),
+        get_groups_filter(ctx),
+        get_groups_member_attribute(ctx),
+        get_groups_name_attribute(ctx),
+        get_groups_rules_attribute(ctx),
+    );
+    vkldap::refresh_ldap_settings_blocking(settings);
+}
+
 pub fn refresh_connection_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
     let settings = VkConnectionSettings::new(
         is_starttls_enabled(ctx),
@@ -165,6 +186,18 @@ pub fn refresh_connection_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
         get_timeout_connection(ctx),
     );
     vkldap::refresh_connection_settings(settings);
+}
+
+pub fn refresh_connection_settings_cache_blocking<T: ValkeyLockIndicator>(ctx: &T) {
+    let settings = VkConnectionSettings::new(
+        is_starttls_enabled(ctx),
+        get_tls_ca_cert_path(ctx),
+        get_tls_cert_path(ctx),
+        get_tls_key_path(ctx),
+        get_connection_pool_size(ctx),
+        get_timeout_connection(ctx),
+    );
+    vkldap::refresh_connection_settings_blocking(settings);
 }
 
 pub fn process_server_list(server_list: String) -> Result<(), ValkeyError> {

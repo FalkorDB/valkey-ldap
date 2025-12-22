@@ -26,6 +26,10 @@ pub fn refresh_ldap_settings(settings: VkLdapSettings) {
     }
 }
 
+pub fn refresh_ldap_settings_blocking(settings: VkLdapSettings) {
+    context::refresh_ldap_settings_blocking(settings);
+}
+
 pub fn refresh_connection_settings(settings: VkConnectionSettings) {
     if !scheduler::is_scheduler_ready() {
         return ();
@@ -37,11 +41,22 @@ pub fn refresh_connection_settings(settings: VkConnectionSettings) {
     }
 }
 
+pub fn refresh_connection_settings_blocking(settings: VkConnectionSettings) {
+    context::refresh_connection_settings_blocking(settings);
+}
+
 pub fn clear_server_list() -> Result<()> {
     if !scheduler::is_scheduler_ready() {
         return Ok(());
     }
     scheduler::submit_sync_task(context::clear_server_list())
+}
+
+pub fn reset_context() -> Result<()> {
+    if !scheduler::is_scheduler_ready() {
+        return Ok(());
+    }
+    scheduler::submit_sync_task(context::reset_context())
 }
 
 pub fn add_server(server_url: Url) -> Result<()> {

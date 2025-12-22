@@ -31,6 +31,10 @@ impl VkLdapContext {
         }
     }
 
+    fn reset(&mut self) {
+        *self = VkLdapContext::new();
+    }
+
     fn get_ldap_settings(&self) -> VkLdapSettings {
         self.ldap_settings.clone()
     }
@@ -152,8 +156,23 @@ pub(super) async fn clear_server_list() {
     });
 }
 
+pub async fn reset_context() {
+    VK_LDAP_CONTEXT.lock().await.reset();
+}
+
 pub async fn refresh_ldap_settings(settings: VkLdapSettings) {
+    debug!("refreshing LDAP settings: search_base={:?}", settings.search_base);
     VK_LDAP_CONTEXT.lock().await.refresh_ldap_settings(settings);
+}
+
+pub fn refresh_ldap_settings_blocking(settings: VkLdapSettings) {
+    debug!("refreshing LDAP settings (blocking): search_base={:?}", settings.search_base);
+    // Use try_lock to avoid deadlock - this is called during initialization when no other tasks are running
+    if let Ok(mut ctx) = VK_LDAP_CONTEXT.try_lock() {
+        ctx.refresh_ldap_settings(settings);
+    } else {
+        log::error!("Failed to acquire lock for refreshing LDAP settings");
+    }
 }
 
 pub async fn refresh_connection_settings(settings: VkConnectionSettings) {
@@ -166,6 +185,16 @@ pub async fn refresh_connection_settings(settings: VkConnectionSettings) {
 
     for server in servers {
         refresh_pool_connections(&server).await
+    }
+}
+
+pub fn refresh_connection_settings_blocking(settings: VkConnectionSettings) {
+    debug!("refreshing connection settings (blocking)");
+    // Use try_lock to avoid deadlock - this is called during initialization when no other tasks are running
+    if let Ok(mut ctx) = VK_LDAP_CONTEXT.try_lock() {
+        ctx.refresh_connection_settings(settings);
+    } else {
+        log::error!("Failed to acquire lock for refreshing connection settings");
     }
 }
 
