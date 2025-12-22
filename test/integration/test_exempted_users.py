@@ -15,7 +15,8 @@ class ExemptedUsersTest(TestCase):
             self.client.ping()
         except:
             # If unauthenticated connection fails, try with user1 (LDAP user)
-            self.client = valkey.Valkey(host='localhost', port=6379, db=0, decode_responses=True, username='user1', password='pass')
+            # user1's LDAP password is user1@123 (defined in test/ldap_users.txt)
+            self.client = valkey.Valkey(host='localhost', port=6379, db=0, decode_responses=True, username='user1', password='user1@123')
         
         clean_acl(self.client)
 
