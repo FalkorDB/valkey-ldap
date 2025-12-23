@@ -1,7 +1,13 @@
 from unittest import TestCase
+import time
 
 import valkey
 from util import clean_acl, setup_ldap_users
+
+
+# Constants for retry logic
+MAX_RETRIES = 5
+RETRY_BASE_DELAY = 0.5
 
 
 class ExemptedUsersTest(TestCase):
@@ -50,7 +56,6 @@ class ExemptedUsersTest(TestCase):
         setup_ldap_users(self.client)
         
         # Wait for LDAP configuration to propagate
-        import time
         time.sleep(1)
         
         # Set exemption pattern that doesn't match normal LDAP users
@@ -58,9 +63,8 @@ class ExemptedUsersTest(TestCase):
         
         # LDAP user 'user1' should still authenticate via LDAP
         # Use retry logic to handle configuration propagation delay
-        max_retries = 5
         last_error = None
-        for attempt in range(max_retries):
+        for attempt in range(MAX_RETRIES):
             try:
                 user1_client = valkey.Valkey(
                     host='localhost',
@@ -74,8 +78,8 @@ class ExemptedUsersTest(TestCase):
                 break
             except (valkey.exceptions.AuthenticationError, valkey.exceptions.ConnectionError) as e:
                 last_error = e
-                if attempt < max_retries - 1:
-                    time.sleep(0.5 * (2 ** attempt))
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(RETRY_BASE_DELAY * (2 ** attempt))
                 else:
                     raise last_error
         
