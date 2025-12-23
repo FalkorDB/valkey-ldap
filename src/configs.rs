@@ -419,58 +419,6 @@ pub fn get_groups_rules_attribute<T: ValkeyLockIndicator>(ctx: &T) -> String {
     attr.to_string()
 }
 
-// TODO: This function is part of the legacy LDAP group to ACL user mapping feature
-// documented in README.md. It's not currently used in the codebase but may be
-// implemented in the future to support the legacy authentication approach where
-// LDAP groups are mapped to predefined Valkey ACL users.
-// See README.md section "Legacy mapping to ACL users" for details.
-#[allow(dead_code)]
-pub fn get_group_acl_user_map<T: ValkeyLockIndicator>(ctx: &T) -> Vec<(String, String)> {
-    // Format: "group1=acluser1,group2=acluser2"
-    let map_guard = LDAP_GROUP_TO_ACL_USER_MAP.lock(ctx);
-    let map_str = map_guard.to_string();
-    let mut res = Vec::new();
-    for pair in map_str.split(',') {
-        let p = pair.trim();
-        if p.is_empty() {
-            continue;
-        }
-        if let Some((g, u)) = p.split_once('=') {
-            res.push((g.trim().to_string(), u.trim().to_string()))
-        }
-    }
-    res
-}
-
-// TODO: This function is part of a static LDAP group to ACL rules mapping feature.
-// While ldap.group_acl_rules_map is documented in README.md, this function is not
-// currently used. The module currently implements dynamic ACL rule sync which reads
-// rules directly from LDAP group entries (via search_groups_rules). This function
-// may be used in the future to support static group-to-rules mappings alongside
-// or instead of reading rules from LDAP attributes.
-#[allow(dead_code)]
-pub fn get_group_acl_rules_map<T: ValkeyLockIndicator>(ctx: &T) -> Vec<(String, Vec<String>)> {
-    // Format: "group1=+@read ~ns:* , group2=+@all"
-    let map_guard = LDAP_GROUP_TO_ACL_RULES_MAP.lock(ctx);
-    let map_str = map_guard.to_string();
-    let mut res = Vec::new();
-    for pair in map_str.split(',') {
-        let p = pair.trim();
-        if p.is_empty() {
-            continue;
-        }
-        if let Some((g, rules_str)) = p.split_once('=') {
-            let tokens: Vec<String> = rules_str
-                .split_whitespace()
-                .map(|t| t.trim().to_string())
-                .filter(|t| !t.is_empty())
-                .collect();
-            res.push((g.trim().to_string(), tokens));
-        }
-    }
-    res
-}
-
 pub fn get_default_acl_rules<T: ValkeyLockIndicator>(ctx: &T) -> Vec<String> {
     let rules_guard = LDAP_DEFAULT_ACL_RULES.lock(ctx);
     let rules = rules_guard.to_string();
