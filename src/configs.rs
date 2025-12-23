@@ -497,7 +497,14 @@ pub fn get_exempted_users_regex_pattern<T: ValkeyLockIndicator>(ctx: &T) -> Stri
 }
 
 pub fn is_user_exempted_from_ldap(username: &str) -> bool {
-    let regex_guard = EXEMPTED_USERS_REGEX_CACHE.lock().unwrap();
+    // Handle poisoned mutex gracefully by assuming no exemption
+    let regex_guard = match EXEMPTED_USERS_REGEX_CACHE.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            error!("exempted users regex cache mutex is poisoned");
+            poisoned.into_inner()
+        }
+    };
     if let Some(regex) = regex_guard.as_ref() {
         regex.is_match(username)
     } else {
@@ -514,7 +521,13 @@ pub fn exempted_users_regex_set_callback(
 
     // Empty pattern clears the exemption list
     if pattern_str.is_empty() {
-        let mut cache = EXEMPTED_USERS_REGEX_CACHE.lock().unwrap();
+        let mut cache = match EXEMPTED_USERS_REGEX_CACHE.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                error!("exempted users regex cache mutex is poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
         *cache = None;
         debug!("cleared exempted users regex pattern");
         return Ok(());
@@ -523,7 +536,13 @@ pub fn exempted_users_regex_set_callback(
     // Validate the regex pattern
     match Regex::new(&pattern_str) {
         Ok(regex) => {
-            let mut cache = EXEMPTED_USERS_REGEX_CACHE.lock().unwrap();
+            let mut cache = match EXEMPTED_USERS_REGEX_CACHE.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    error!("exempted users regex cache mutex is poisoned, recovering");
+                    poisoned.into_inner()
+                }
+            };
             *cache = Some(regex);
             debug!("set exempted users regex pattern: {}", pattern_str);
             Ok(())
