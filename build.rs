@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 use std::process::Command;
 
-fn copy_file_to_build_dir(from: &str) -> () {
+fn copy_file_to_build_dir(from: &str) {
     let arr = from.split("/");
     let file_name_opt = arr.last();
     match file_name_opt {

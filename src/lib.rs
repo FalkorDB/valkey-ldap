@@ -27,8 +27,30 @@ fn initializer(ctx: &Context, _args: &[ValkeyString]) -> Status {
     scheduler::start_job_scheduler();
     failure_detector::start_failure_detector_thread();
 
-    configs::refresh_ldap_settings_cache(ctx);
-    configs::refresh_connection_settings_cache(ctx);
+    // Wait for scheduler to be ready (with timeout)
+    let mut attempts = 0;
+    while !scheduler::is_scheduler_ready() && attempts < 100 {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        attempts += 1;
+    }
+
+    if !scheduler::is_scheduler_ready() {
+        ctx.log_warning("scheduler not ready after timeout");
+        return Status::Err;
+    }
+
+    // Reset context to clear any stale state from previous module load
+    if let Err(err) = vkldap::reset_context() {
+        ctx.log_warning(format!("failed to reset context: {err}").as_str());
+    }
+
+    // Debug: check search_base value from config
+    let search_base_value = configs::LDAP_SEARCH_BASE.lock(ctx).to_string_lossy();
+    ctx.log_debug(format!("search_base from config: '{}'", search_base_value).as_str());
+
+    // Use blocking versions during initialization to avoid async scheduler delays
+    configs::refresh_ldap_settings_cache_blocking(ctx);
+    configs::refresh_connection_settings_cache_blocking(ctx);
 
     let server_list = configs::LDAP_SERVER_LIST.lock(ctx).to_string_lossy();
     if let Err(err) = configs::process_server_list(server_list) {
@@ -55,6 +77,9 @@ fn deinitializer(ctx: &Context) -> Status {
         error!("{err}");
         return Status::Err;
     }
+
+    // Teardown the logger to free the thread-safe context
+    standard_log_implementation::teardown();
 
     Status::Ok
 }
@@ -194,6 +219,70 @@ valkey_module! {
                 "entryDN",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                "groups_search_base",
+                &*configs::LDAP_GROUPS_SEARCH_BASE,
+                "",
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                "groups_filter",
+                &*configs::LDAP_GROUPS_FILTER,
+                "objectClass=groupOfNames",
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                "groups_member_attribute",
+                &*configs::LDAP_GROUPS_MEMBER_ATTRIBUTE,
+                "member",
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                "groups_name_attribute",
+                &*configs::LDAP_GROUPS_NAME_ATTRIBUTE,
+                "cn",
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                "groups_rules_attribute",
+                &*configs::LDAP_GROUPS_RULES_ATTRIBUTE,
+                "valkeyACL",
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                "group_acl_user_map",
+                &*configs::LDAP_GROUP_TO_ACL_USER_MAP,
+                "",
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                "group_acl_rules_map",
+                &*configs::LDAP_GROUP_TO_ACL_RULES_MAP,
+                "",
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                "default_acl_rules",
+                &*configs::LDAP_DEFAULT_ACL_RULES,
+                "on resetpass",
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                "exempted_users_regex",
+                &*configs::LDAP_EXEMPTED_USERS_REGEX,
+                "",
+                ConfigurationFlags::DEFAULT,
+                None,
+                Some(Box::new(configs::exempted_users_regex_set_callback))
             ],
         ],
         bool: [

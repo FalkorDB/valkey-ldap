@@ -26,6 +26,10 @@ pub fn refresh_ldap_settings(settings: VkLdapSettings) {
     }
 }
 
+pub fn refresh_ldap_settings_blocking(settings: VkLdapSettings) {
+    context::refresh_ldap_settings_blocking(settings);
+}
+
 pub fn refresh_connection_settings(settings: VkConnectionSettings) {
     if !scheduler::is_scheduler_ready() {
         return ();
@@ -37,11 +41,22 @@ pub fn refresh_connection_settings(settings: VkConnectionSettings) {
     }
 }
 
+pub fn refresh_connection_settings_blocking(settings: VkConnectionSettings) {
+    context::refresh_connection_settings_blocking(settings);
+}
+
 pub fn clear_server_list() -> Result<()> {
     if !scheduler::is_scheduler_ready() {
         return Ok(());
     }
     scheduler::submit_sync_task(context::clear_server_list())
+}
+
+pub fn reset_context() -> Result<()> {
+    if !scheduler::is_scheduler_ready() {
+        return Ok(());
+    }
+    scheduler::submit_sync_task(context::reset_context())
 }
 
 pub fn add_server(server_url: Url) -> Result<()> {
@@ -59,18 +74,20 @@ pub fn get_servers_health_status() -> Result<Vec<VkLdapServer>> {
     scheduler::submit_sync_task(context::get_servers_health_status())
 }
 
+#[allow(dead_code)]
 pub fn vk_ldap_bind<C, T>(username: String, password: String, callback: C, data: T) -> Result<()>
 where
     T: 'static + Send,
     C: CallbackTrait<T, Result<()>>,
 {
     if !scheduler::is_scheduler_ready() {
-        return Ok(());
+        return Err(VkLdapError::SchedulerNotReady);
     }
 
     scheduler::submit_async_task(context::ldap_bind(username, password), callback, data)
 }
 
+#[allow(dead_code)]
 pub fn vk_ldap_search_and_bind<C, T>(
     username: String,
     password: String,
@@ -82,11 +99,97 @@ where
     C: CallbackTrait<T, Result<()>>,
 {
     if !scheduler::is_scheduler_ready() {
-        return Ok(());
+        return Err(VkLdapError::SchedulerNotReady);
     }
 
     scheduler::submit_async_task(
         context::ldap_search_and_bind(username, password),
+        callback,
+        data,
+    )
+}
+
+#[allow(dead_code)]
+pub fn vk_ldap_bind_and_groups<C, T>(
+    username: String,
+    password: String,
+    callback: C,
+    data: T,
+) -> Result<()>
+where
+    T: 'static + Send,
+    C: CallbackTrait<T, Result<Vec<String>>>,
+{
+    if !scheduler::is_scheduler_ready() {
+        return Err(VkLdapError::SchedulerNotReady);
+    }
+
+    scheduler::submit_async_task(
+        context::ldap_bind_and_groups(username, password),
+        callback,
+        data,
+    )
+}
+
+#[allow(dead_code)]
+pub fn vk_ldap_search_bind_and_groups<C, T>(
+    username: String,
+    password: String,
+    callback: C,
+    data: T,
+) -> Result<()>
+where
+    T: 'static + Send,
+    C: CallbackTrait<T, Result<Vec<String>>>,
+{
+    if !scheduler::is_scheduler_ready() {
+        return Err(VkLdapError::SchedulerNotReady);
+    }
+
+    scheduler::submit_async_task(
+        context::ldap_search_bind_and_groups(username, password),
+        callback,
+        data,
+    )
+}
+
+pub fn vk_ldap_bind_and_group_rules<C, T>(
+    username: String,
+    password: String,
+    callback: C,
+    data: T,
+) -> Result<()>
+where
+    T: 'static + Send,
+    C: CallbackTrait<T, Result<Vec<String>>>,
+{
+    if !scheduler::is_scheduler_ready() {
+        return Err(VkLdapError::SchedulerNotReady);
+    }
+
+    scheduler::submit_async_task(
+        context::ldap_bind_and_group_rules(username, password),
+        callback,
+        data,
+    )
+}
+
+pub fn vk_ldap_search_bind_and_group_rules<C, T>(
+    username: String,
+    password: String,
+    callback: C,
+    data: T,
+) -> Result<()>
+where
+    T: 'static + Send,
+    C: CallbackTrait<T, Result<Vec<String>>>,
+{
+    if !scheduler::is_scheduler_ready() {
+        return Err(VkLdapError::SchedulerNotReady);
+    }
+
+    scheduler::submit_async_task(
+        context::ldap_search_bind_and_group_rules(username, password),
         callback,
         data,
     )

@@ -2,6 +2,7 @@ use lazy_static::lazy_static;
 use std::{sync::Arc, time::Duration};
 
 use log::{debug, info};
+use tokio::sync::Mutex as TokioMutex;
 use tokio::sync::Mutex;
 use url::Url;
 
@@ -28,6 +29,10 @@ impl VkLdapContext {
             ldap_settings: VkLdapSettings::default(),
             connection_settings: VkConnectionSettings::default(),
         }
+    }
+
+    fn reset(&mut self) {
+        *self = VkLdapContext::new();
     }
 
     fn get_ldap_settings(&self) -> VkLdapSettings {
@@ -151,8 +156,29 @@ pub(super) async fn clear_server_list() {
     });
 }
 
+pub async fn reset_context() {
+    VK_LDAP_CONTEXT.lock().await.reset();
+}
+
 pub async fn refresh_ldap_settings(settings: VkLdapSettings) {
+    debug!(
+        "refreshing LDAP settings: search_base={:?}",
+        settings.search_base
+    );
     VK_LDAP_CONTEXT.lock().await.refresh_ldap_settings(settings);
+}
+
+pub fn refresh_ldap_settings_blocking(settings: VkLdapSettings) {
+    debug!(
+        "refreshing LDAP settings (blocking): search_base={:?}",
+        settings.search_base
+    );
+    // Use try_lock to avoid deadlock - this is called during initialization when no other tasks are running
+    if let Ok(mut ctx) = VK_LDAP_CONTEXT.try_lock() {
+        ctx.refresh_ldap_settings(settings);
+    } else {
+        log::error!("Failed to acquire lock for refreshing LDAP settings");
+    }
 }
 
 pub async fn refresh_connection_settings(settings: VkConnectionSettings) {
@@ -165,6 +191,16 @@ pub async fn refresh_connection_settings(settings: VkConnectionSettings) {
 
     for server in servers {
         refresh_pool_connections(&server).await
+    }
+}
+
+pub fn refresh_connection_settings_blocking(settings: VkConnectionSettings) {
+    debug!("refreshing connection settings (blocking)");
+    // Use try_lock to avoid deadlock - this is called during initialization when no other tasks are running
+    if let Ok(mut ctx) = VK_LDAP_CONTEXT.try_lock() {
+        ctx.refresh_connection_settings(settings);
+    } else {
+        log::error!("Failed to acquire lock for refreshing connection settings");
     }
 }
 
@@ -253,14 +289,14 @@ where
     }
 }
 
+#[allow(dead_code)]
 pub(super) async fn ldap_bind(username: String, password: String) -> Result<()> {
     let settings = VK_LDAP_CONTEXT.lock().await.get_ldap_settings();
 
-    let prefix = settings.bind_db_prefix;
-    let suffix = settings.bind_db_suffix;
-    let user_dn = format!("{prefix}{username}{suffix}");
-
     run_ldap_op_with_failover(async move |conn| {
+        let prefix = settings.bind_db_prefix.clone();
+        let suffix = settings.bind_db_suffix.clone();
+        let user_dn = format!("{prefix}{username}{suffix}");
         conn.bind(
             user_dn.as_str(),
             password.as_str(),
@@ -271,6 +307,7 @@ pub(super) async fn ldap_bind(username: String, password: String) -> Result<()> 
     .await
 }
 
+#[allow(dead_code)]
 pub(super) async fn ldap_search_and_bind(username: String, password: String) -> Result<()> {
     let settings = VK_LDAP_CONTEXT.lock().await.get_ldap_settings();
 
@@ -295,4 +332,156 @@ pub(super) async fn ldap_search_and_bind(username: String, password: String) -> 
         }
     })
     .await
+}
+
+#[allow(dead_code)]
+pub(super) async fn ldap_bind_and_groups(
+    username: String,
+    password: String,
+) -> Result<Vec<String>> {
+    let settings = VK_LDAP_CONTEXT.lock().await.get_ldap_settings();
+
+    let groups_out: Arc<TokioMutex<Option<Vec<String>>>> = Arc::new(TokioMutex::new(None));
+    let groups_out_cl = groups_out.clone();
+
+    run_ldap_op_with_failover(async move |conn| {
+        let prefix = settings.bind_db_prefix.clone();
+        let suffix = settings.bind_db_suffix.clone();
+        let user_dn = format!("{prefix}{username}{suffix}");
+        // Bind first
+        conn.bind(
+            user_dn.as_str(),
+            password.as_str(),
+            settings.timeout_ldap_operation,
+        )
+        .await?;
+        // Then fetch groups
+        let groups = conn
+            .search_groups(&settings, user_dn.as_str(), settings.timeout_ldap_operation)
+            .await?;
+        let mut guard = groups_out_cl.lock().await;
+        *guard = Some(groups);
+        Ok(())
+    })
+    .await?;
+    let guard = groups_out.lock().await;
+    Ok(guard.clone().unwrap_or_default())
+}
+
+#[allow(dead_code)]
+pub(super) async fn ldap_search_bind_and_groups(
+    username: String,
+    password: String,
+) -> Result<Vec<String>> {
+    let settings = VK_LDAP_CONTEXT.lock().await.get_ldap_settings();
+
+    let groups_out: Arc<TokioMutex<Option<Vec<String>>>> = Arc::new(TokioMutex::new(None));
+    let groups_out_cl = groups_out.clone();
+
+    run_ldap_op_with_failover(async move |conn| {
+        let search_res = conn
+            .search(
+                &settings,
+                username.as_str(),
+                settings.timeout_ldap_operation,
+            )
+            .await;
+        match search_res {
+            Ok(user_dn) => {
+                conn.bind(
+                    user_dn.as_str(),
+                    password.as_str(),
+                    settings.timeout_ldap_operation,
+                )
+                .await?;
+                let groups = conn
+                    .search_groups(&settings, user_dn.as_str(), settings.timeout_ldap_operation)
+                    .await?;
+                let mut guard = groups_out_cl.lock().await;
+                *guard = Some(groups);
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
+    })
+    .await?;
+    let guard = groups_out.lock().await;
+    Ok(guard.clone().unwrap_or_default())
+}
+
+pub(super) async fn ldap_bind_and_group_rules(
+    username: String,
+    password: String,
+) -> Result<Vec<String>> {
+    let settings = VK_LDAP_CONTEXT.lock().await.get_ldap_settings();
+
+    let rules_out: Arc<TokioMutex<Option<Vec<String>>>> = Arc::new(TokioMutex::new(None));
+    let rules_out_cl = rules_out.clone();
+
+    run_ldap_op_with_failover(async move |conn| {
+        let prefix = settings.bind_db_prefix.clone();
+        let suffix = settings.bind_db_suffix.clone();
+        let user_dn = format!("{prefix}{username}{suffix}");
+        // Bind first
+        conn.bind(
+            user_dn.as_str(),
+            password.as_str(),
+            settings.timeout_ldap_operation,
+        )
+        .await?;
+        // Then fetch rules
+        let rules = conn
+            .search_groups_rules(&settings, user_dn.as_str(), settings.timeout_ldap_operation)
+            .await?;
+        let mut guard = rules_out_cl.lock().await;
+        *guard = Some(rules);
+        Ok(())
+    })
+    .await?;
+    let guard = rules_out.lock().await;
+    Ok(guard.clone().unwrap_or_default())
+}
+
+pub(super) async fn ldap_search_bind_and_group_rules(
+    username: String,
+    password: String,
+) -> Result<Vec<String>> {
+    let settings = VK_LDAP_CONTEXT.lock().await.get_ldap_settings();
+
+    let rules_out: Arc<TokioMutex<Option<Vec<String>>>> = Arc::new(TokioMutex::new(None));
+    let rules_out_cl = rules_out.clone();
+
+    run_ldap_op_with_failover(async move |conn| {
+        let search_res = conn
+            .search(
+                &settings,
+                username.as_str(),
+                settings.timeout_ldap_operation,
+            )
+            .await;
+        match search_res {
+            Ok(user_dn) => {
+                conn.bind(
+                    user_dn.as_str(),
+                    password.as_str(),
+                    settings.timeout_ldap_operation,
+                )
+                .await?;
+                let rules = conn
+                    .search_groups_rules(
+                        &settings,
+                        user_dn.as_str(),
+                        settings.timeout_ldap_operation,
+                    )
+                    .await?;
+                let mut guard = rules_out_cl.lock().await;
+                *guard = Some(rules);
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
+    })
+    .await?;
+    let guard = rules_out.lock().await;
+    Ok(guard.clone().unwrap_or_default())
 }
