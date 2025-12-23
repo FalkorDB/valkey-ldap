@@ -34,6 +34,7 @@ fn auth_reply_callback(
                     let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
                     if let Err(e) = ctx.call("ACL", &arg_refs[..]) {
                         error!("failed to set ACL for user {uname}: {e}");
+                        return Err(ValkeyError::Str("Failed to apply ACL rules"));
                     }
                 }
 

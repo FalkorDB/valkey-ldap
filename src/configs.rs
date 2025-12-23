@@ -500,9 +500,9 @@ pub fn is_user_exempted_from_ldap(username: &str) -> bool {
     // Handle poisoned mutex gracefully by assuming no exemption
     let regex_guard = match EXEMPTED_USERS_REGEX_CACHE.lock() {
         Ok(guard) => guard,
-        Err(poisoned) => {
-            error!("exempted users regex cache mutex is poisoned");
-            poisoned.into_inner()
+        Err(_) => {
+            error!("exempted users regex cache mutex is poisoned. Assuming no user is exempted.");
+            return false;
         }
     };
     if let Some(regex) = regex_guard.as_ref() {
