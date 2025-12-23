@@ -1,13 +1,13 @@
-dn: cn=appdev-team,dc=example,dc=in
+dn: cn=appdev-team,dc=valkey,dc=io
 objectClass: top
 objectClass: groupOfNames
 cn: appdev-team
 description: App Development Team
-member: cn=user2,ou=appdev,dc=example,dc=in
+member: cn=user2,ou=appdev,dc=valkey,dc=io
 
-dn: cn=devops-team,dc=example,dc=in
+dn: cn=devops-team,dc=valkey,dc=io
 objectClass: top
 objectClass: groupOfNames
 cn: devops-team
 description: DevOps Team
-member: cn=user1,ou=devops,dc=example,dc=in
+member: cn=user1,ou=devops,dc=valkey,dc=io

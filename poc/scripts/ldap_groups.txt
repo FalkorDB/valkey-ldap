@@ -1,12 +1,11 @@
 dn: ou=groups,dc=valkey,dc=io
 objectClass: organizationalUnit
-cn: groups
+ou: groups
 
-dn: cn=devops-team,dc=example,dc=in
-objectClass: top
+dn: cn=admins,ou=groups,dc=valkey,dc=io
 objectClass: groupOfNames
-cn: devops-team
-description: DevOps Team
+description: +@all ~*
+cn: admins
 member: cn=Muhammad Qadora,ou=devops,dc=valkey,dc=io
 member: cn=David Zimberknopf,ou=devops,dc=valkey,dc=io
 member: cn=Barak x,ou=devops,dc=valkey,dc=io
