@@ -1,0 +1,24 @@
+dn: ou=devops,dc=valkey,dc=io
+objectClass: organizationalUnit
+ou: devops
+
+dn: cn=Muhammad Qadora,ou=devops,dc=valkey,dc=io
+objectClass: inetOrgPerson
+cn: Muhammad Qadora
+sn: Qadora
+uid: muhammad
+userPassword: muhammad@123
+
+dn: cn=David Zimberknopf,ou=devops,dc=valkey,dc=io
+objectClass: inetOrgPerson
+cn: David Zimberknopf
+sn: Zimberknopf
+uid: dudi
+userPassword: dudi@123
+
+dn: cn=Barak x,ou=devops,dc=valkey,dc=io
+objectClass: inetOrgPerson
+cn: Barak x
+sn: x
+uid: barak
+userPassword: barak@123
