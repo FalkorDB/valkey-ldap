@@ -164,7 +164,7 @@ where
     C: CallbackTrait<T, Result<Vec<String>>>,
 {
     if !scheduler::is_scheduler_ready() {
-        return Ok(());
+        return Err(VkLdapError::SchedulerNotReady);
     }
 
     scheduler::submit_async_task(
@@ -185,7 +185,7 @@ where
     C: CallbackTrait<T, Result<Vec<String>>>,
 {
     if !scheduler::is_scheduler_ready() {
-        return Ok(());
+        return Err(VkLdapError::SchedulerNotReady);
     }
 
     scheduler::submit_async_task(
