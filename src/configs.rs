@@ -419,6 +419,11 @@ pub fn get_groups_rules_attribute<T: ValkeyLockIndicator>(ctx: &T) -> String {
     attr.to_string()
 }
 
+// TODO: This function is part of the legacy LDAP group to ACL user mapping feature
+// documented in README.md. It's not currently used in the codebase but may be
+// implemented in the future to support the legacy authentication approach where
+// LDAP groups are mapped to predefined Valkey ACL users.
+// See README.md section "Legacy mapping to ACL users" for details.
 #[allow(dead_code)]
 pub fn get_group_acl_user_map<T: ValkeyLockIndicator>(ctx: &T) -> Vec<(String, String)> {
     // Format: "group1=acluser1,group2=acluser2"
@@ -437,6 +442,12 @@ pub fn get_group_acl_user_map<T: ValkeyLockIndicator>(ctx: &T) -> Vec<(String, S
     res
 }
 
+// TODO: This function is part of a static LDAP group to ACL rules mapping feature.
+// While ldap.group_acl_rules_map is documented in README.md, this function is not
+// currently used. The module currently implements dynamic ACL rule sync which reads
+// rules directly from LDAP group entries (via search_groups_rules). This function
+// may be used in the future to support static group-to-rules mappings alongside
+// or instead of reading rules from LDAP attributes.
 #[allow(dead_code)]
 pub fn get_group_acl_rules_map<T: ValkeyLockIndicator>(ctx: &T) -> Vec<(String, Vec<String>)> {
     // Format: "group1=+@read ~ns:* , group2=+@all"

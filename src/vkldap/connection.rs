@@ -348,13 +348,13 @@ impl VkLdapConnection {
         Ok(sentry.attrs[dn_attribute][0].clone())
     }
 
-    #[allow(dead_code)]
-    pub async fn search_groups(
+    /// Helper function to perform admin bind and compute base/filter for group searches
+    async fn prepare_group_search<'a>(
         &mut self,
-        settings: &VkLdapSettings,
-        user_dn: &str,
+        settings: &'a VkLdapSettings,
         timeout: Duration,
-    ) -> Result<Vec<String>> {
+    ) -> Result<(&'a str, &'a str)> {
+        // Admin bind if credentials are configured
         if let Some(bind_dn) = &settings.search_bind_dn {
             if let Some(bind_passwd) = &settings.search_bind_passwd {
                 debug!("running ldap admin bind with DN='{bind_dn}'");
@@ -368,17 +368,29 @@ impl VkLdapConnection {
             }
         }
 
-        let mut base = "";
-        if let Some(sbase) = &settings.groups_search_base {
-            base = &sbase;
-        } else if let Some(sbase) = &settings.search_base {
-            base = &sbase;
-        }
+        // Determine search base
+        let base = settings
+            .groups_search_base
+            .as_deref()
+            .or(settings.search_base.as_deref())
+            .unwrap_or("");
 
-        let mut filter = "objectClass=groupOfNames";
-        if let Some(sfilter) = &settings.groups_filter {
-            filter = &sfilter;
-        }
+        // Determine filter
+        let filter = settings
+            .groups_filter
+            .as_deref()
+            .unwrap_or("objectClass=groupOfNames");
+
+        Ok((base, filter))
+    }
+
+    pub async fn search_groups(
+        &mut self,
+        settings: &VkLdapSettings,
+        user_dn: &str,
+        timeout: Duration,
+    ) -> Result<Vec<String>> {
+        let (base, filter) = self.prepare_group_search(settings, timeout).await?;
 
         let member_attr = &settings.groups_member_attribute;
         let name_attr = &settings.groups_name_attribute;
@@ -419,35 +431,15 @@ impl VkLdapConnection {
         user_dn: &str,
         timeout: Duration,
     ) -> Result<Vec<String>> {
-        if let Some(bind_dn) = &settings.search_bind_dn {
-            if let Some(bind_passwd) = &settings.search_bind_passwd {
-                debug!("running ldap admin bind with DN='{bind_dn}'");
-                handle_ldap_error!(
-                    self.ldap_handler
-                        .with_timeout(timeout)
-                        .simple_bind(&bind_dn, &bind_passwd)
-                        .await,
-                    VkLdapError::LdapAdminBindError
-                );
-            }
-        }
-
-        let mut base = "";
-        if let Some(sbase) = &settings.groups_search_base {
-            base = &sbase;
-        } else if let Some(sbase) = &settings.search_base {
-            base = &sbase;
-        }
-
-        let mut filter = "objectClass=groupOfNames";
-        if let Some(sfilter) = &settings.groups_filter {
-            filter = &sfilter;
-        }
+        let (base, filter) = self.prepare_group_search(settings, timeout).await?;
 
         let member_attr = &settings.groups_member_attribute;
         let rules_attr = &settings.groups_rules_attribute;
 
-        let search_filter = format!("(&({filter})({member_attr}={user_dn}))");
+        let search_filter = format!(
+            "(&({filter})({member_attr}={}))",
+            ldap3::ldap_escape(user_dn)
+        );
         let scope = settings.search_scope;
 
         debug!(

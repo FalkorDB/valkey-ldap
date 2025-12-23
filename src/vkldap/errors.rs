@@ -18,6 +18,7 @@ pub enum VkLdapError {
     FailedToStopFailuredDetectorThread,
     FailedToShutdownJobScheduler,
     FailedToSendJobToScheduler(String),
+    SchedulerNotReady,
 }
 
 unsafe impl Send for VkLdapError {}
@@ -94,6 +95,10 @@ impl std::fmt::Display for VkLdapError {
             VkLdapError::FailedToSendJobToScheduler(errmsg) => {
                 write!(f, "failed to send job to scheduler: {errmsg}")
             }
+            VkLdapError::SchedulerNotReady => write!(
+                f,
+                "LDAP scheduler is not ready. Module may still be initializing"
+            ),
         }
     }
 }
