@@ -8,6 +8,7 @@ from util import clean_acl, setup_ldap_users
 # Constants for retry logic
 MAX_RETRIES = 5
 RETRY_BASE_DELAY = 0.5
+MAX_RETRY_DELAY = 5.0  # Cap exponential backoff at 5 seconds
 
 
 class ExemptedUsersTest(TestCase):
@@ -79,9 +80,15 @@ class ExemptedUsersTest(TestCase):
             except (valkey.exceptions.AuthenticationError, valkey.exceptions.ConnectionError) as e:
                 last_error = e
                 if attempt < MAX_RETRIES - 1:
-                    time.sleep(RETRY_BASE_DELAY * (2 ** attempt))
+                    # Cap exponential backoff at MAX_RETRY_DELAY
+                    delay = min(RETRY_BASE_DELAY * (2 ** attempt), MAX_RETRY_DELAY)
+                    time.sleep(delay)
                 else:
-                    raise last_error
+                    # Ensure we have an error to raise (defensive check)
+                    if last_error:
+                        raise last_error
+                    else:
+                        raise Exception('Authentication failed after retries')
         
     def test_multiple_exempted_users_regex(self):
         """Test regex pattern matching multiple users"""
