@@ -383,7 +383,7 @@ impl VkLdapConnection {
         let member_attr = &settings.groups_member_attribute;
         let name_attr = &settings.groups_name_attribute;
 
-        let search_filter = format!("(&({filter})({member_attr}={user_dn}))");
+        let search_filter = format!("(&({filter})({member_attr}={}))", ldap3::ldap_escape(user_dn));
         let scope = settings.search_scope;
 
         debug!(
