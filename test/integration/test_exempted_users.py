@@ -13,7 +13,7 @@ class ExemptedUsersTest(TestCase):
             self.client = valkey.Valkey(host='localhost', port=6379, db=0, decode_responses=True, socket_connect_timeout=2)
             # Test if connection works
             self.client.ping()
-        except:
+        except (valkey.exceptions.ConnectionError, valkey.exceptions.TimeoutError, valkey.exceptions.AuthenticationError):
             # If unauthenticated connection fails, try with user1 (LDAP user)
             # user1's LDAP password is user1@123 (defined in test/ldap_users.txt)
             self.client = valkey.Valkey(host='localhost', port=6379, db=0, decode_responses=True, username='user1', password='user1@123')
@@ -49,20 +49,35 @@ class ExemptedUsersTest(TestCase):
         """Test that non-exempted users still use LDAP authentication"""
         setup_ldap_users(self.client)
         
+        # Wait for LDAP configuration to propagate
+        import time
+        time.sleep(1)
+        
         # Set exemption pattern that doesn't match normal LDAP users
         self.client.config_set('ldap.exempted_users_regex', '^(default|exporter)$')
         
         # LDAP user 'user1' should still authenticate via LDAP
-        user1_client = valkey.Valkey(
-            host='localhost',
-            port=6379,
-            username='user1',
-            password='user1@123',
-            decode_responses=True
-        )
-        
-        # Should be able to ping
-        self.assertTrue(user1_client.ping())
+        # Use retry logic to handle configuration propagation delay
+        max_retries = 5
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                user1_client = valkey.Valkey(
+                    host='localhost',
+                    port=6379,
+                    username='user1',
+                    password='user1@123',
+                    decode_responses=True
+                )
+                # Should be able to ping
+                self.assertTrue(user1_client.ping())
+                break
+            except (valkey.exceptions.AuthenticationError, valkey.exceptions.ConnectionError) as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    time.sleep(0.5 * (2 ** attempt))
+                else:
+                    raise last_error
         
     def test_multiple_exempted_users_regex(self):
         """Test regex pattern matching multiple users"""

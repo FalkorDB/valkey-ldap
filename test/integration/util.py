@@ -134,7 +134,3 @@ def setup_ldap_users(client):
     
     # Users user1 and u2 are already defined in valkey.conf
     # No need to recreate them
-
-    
-    # Users user1 and u2 are already defined in valkey.conf
-    # No need to recreate them
