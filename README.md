@@ -81,6 +81,21 @@ ACL SET USER bob on resetpass +@hash
 
 After creating the above user `bob` in Valkey, it will only be possible to authenticate user `bob` with a successful authentication from the LDAP module.
 
+### Automatic Cleanup of Deleted LDAP Users
+
+When a user is deleted from LDAP but still exists in the Valkey ACL, the module automatically removes that user from Valkey's ACL on the next authentication attempt. This ensures that ACL entries stay synchronized with LDAP and prevents unauthorized access from stale user accounts.
+
+**Important Notes:**
+
+1. **Exempted users are never deleted**: Users matching the `ldap.exempted_users_regex` pattern are protected from automatic deletion, even if LDAP authentication fails.
+
+2. **Deletion triggers**: A user is deleted from ACL when:
+   - The user attempts to authenticate
+   - LDAP authentication fails (user not found in LDAP, wrong credentials, etc.)
+   - The user is not exempted from LDAP authentication
+
+3. **Protected users**: The `default` user and other system users that cannot be deleted by `ACL DELUSER` are automatically protected by Valkey's built-in safeguards.
+
 ## Exempting Users from LDAP Authentication
 
 In some scenarios, certain users need to bypass LDAP authentication and use local Valkey authentication instead. Common examples include:
@@ -116,6 +131,8 @@ CONFIG SET ldap.exempted_users_regex ""
 2. **Exemption takes precedence**: If a username matches the exemption pattern, LDAP is **never contacted** for that user, even if a user with the same name exists in LDAP. Only the local Valkey password will work.
 
 3. **Name conflicts**: To avoid confusion, use distinctive naming conventions for exempted users (e.g., `local-exporter`, `valkey-admin`) or ensure exempted usernames don't exist in your LDAP directory.
+
+4. **Protection from automatic deletion**: Exempted users are protected from the automatic ACL cleanup feature. When a non-exempted user fails LDAP authentication, they are automatically removed from Valkey's ACL. Exempted users will never be automatically deleted, even if authentication fails.
 
 ### Example Setup
 
