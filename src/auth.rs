@@ -20,8 +20,16 @@ fn auth_reply_callback(
                 // Only apply dynamic ACL rules if LDAP tokens were found
                 // This preserves backward compatibility with pre-configured users
                 if !tokens_from_ldap.is_empty() {
-                    // Build ACL rules: defaults + LDAP-provided tokens
-                    let mut rule_tokens: Vec<String> = configs::get_default_acl_rules(ctx);
+                    // Build ACL rules: reset commands/keys/channels + defaults + LDAP-provided tokens
+                    let mut rule_tokens: Vec<String> = Vec::new();
+                    
+                    // Reset all permissions first to avoid accumulation
+                    rule_tokens.push("resetkeys".to_string());
+                    rule_tokens.push("resetchannels".to_string());
+                    rule_tokens.push("-@all".to_string());
+                    
+                    // Add default rules and LDAP tokens
+                    rule_tokens.extend(configs::get_default_acl_rules(ctx));
                     rule_tokens.extend(tokens_from_ldap.iter().cloned());
 
                     // Apply ACL SETUSER <username> <rules...>
