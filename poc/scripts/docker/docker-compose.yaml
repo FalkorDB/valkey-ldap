@@ -41,12 +41,30 @@ services:
     ports:
         - 6379:6379
     entrypoint:
-      - /bin/sh
+      - /bin/bash
       - -c
       - |
         redis-server /var/lib/falkordb/node.conf
     volumes:
-        - /Users/muhammadqadora/github/valkey-ldap/poc/libvalkey_ldap.so:/var/lib/falkordb/libvalkey_ldap.so
-        - /Users/muhammadqadora/github/valkey-ldap/poc/node.conf:/var/lib/falkordb/node.conf
+        - ../../libvalkey_ldap.so:/var/lib/falkordb/libvalkey_ldap.so
+        - ../../node.conf:/var/lib/falkordb/node.conf
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    container_name: ldap-frontend
+    ports:
+        - 5001:5000
+    environment:
+        - LDAP_SERVER=ldap://ldap:389
+        - LDAP_ADMIN_DN=cn=admin,dc=valkey,dc=io
+        - LDAP_ADMIN_PASSWORD=admin123!
+        - LDAP_BASE_DN=dc=valkey,dc=io
+        - REDIS_HOST=falkordb
+        - REDIS_PORT=6379
+    depends_on:
+        - ldap
+        - falkordb
 
 
