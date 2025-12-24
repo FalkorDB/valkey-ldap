@@ -53,8 +53,26 @@ fn auth_reply_callback(
                 }
             }
             Err(err) => {
-                debug!("failed to authenticate LDAP user {username}");
+                let uname = username.to_string();
+                debug!("failed to authenticate LDAP user {uname}");
                 error!("LDAP authentication failure: {err}");
+                
+                // If user is not exempted from LDAP, delete them from ACL
+                // This ensures users deleted from LDAP are also removed from Valkey ACL
+                if !configs::is_user_exempted_from_ldap(&uname) {
+                    debug!("deleting non-exempted user {uname} from ACL after LDAP authentication failure");
+                    // Attempt to delete the user from ACL
+                    match ctx.call("ACL", &["DELUSER", &uname]) {
+                        Ok(_) => {
+                            debug!("successfully deleted user {uname} from ACL");
+                        }
+                        Err(e) => {
+                            // Log but don't fail - user might not exist in ACL or be undeletable (like default)
+                            debug!("could not delete user {uname} from ACL: {e}");
+                        }
+                    }
+                }
+                
                 Ok(AUTH_NOT_HANDLED)
             }
         }
