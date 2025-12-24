@@ -17,33 +17,31 @@ fn auth_reply_callback(
     if let Some(res) = priv_data {
         match res {
             Ok(tokens_from_ldap) => {
-                // Only apply dynamic ACL rules if LDAP tokens were found
-                // This preserves backward compatibility with pre-configured users
-                if !tokens_from_ldap.is_empty() {
-                    // Build ACL rules: reset commands/keys/channels + defaults + LDAP-provided tokens
-                    let mut rule_tokens: Vec<String> = Vec::new();
+                // Always apply ACL rules for LDAP-authenticated users to ensure
+                // users removed from all groups don't retain stale permissions
+                // Build ACL rules: reset commands/keys/channels + defaults + LDAP-provided tokens
+                let mut rule_tokens: Vec<String> = Vec::new();
 
-                    // Reset all permissions first to avoid accumulation
-                    rule_tokens.push("resetkeys".to_string());
-                    rule_tokens.push("resetchannels".to_string());
-                    rule_tokens.push("-@all".to_string());
+                // Reset all permissions first to avoid accumulation
+                rule_tokens.push("resetkeys".to_string());
+                rule_tokens.push("resetchannels".to_string());
+                rule_tokens.push("-@all".to_string());
 
-                    // Add default rules and LDAP tokens
-                    rule_tokens.extend(configs::get_default_acl_rules(ctx));
-                    rule_tokens.extend(tokens_from_ldap.iter().cloned());
+                // Add default rules and LDAP tokens (which may be empty)
+                rule_tokens.extend(configs::get_default_acl_rules(ctx));
+                rule_tokens.extend(tokens_from_ldap.iter().cloned());
 
-                    // Apply ACL SETUSER <username> <rules...>
-                    let uname = username.to_string();
-                    let mut args: Vec<String> = Vec::with_capacity(2 + rule_tokens.len());
-                    args.push("SETUSER".to_string());
-                    args.push(uname.clone());
-                    args.extend(rule_tokens);
+                // Apply ACL SETUSER <username> <rules...>
+                let uname = username.to_string();
+                let mut args: Vec<String> = Vec::with_capacity(2 + rule_tokens.len());
+                args.push("SETUSER".to_string());
+                args.push(uname.clone());
+                args.extend(rule_tokens);
 
-                    let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-                    if let Err(e) = ctx.call("ACL", &arg_refs[..]) {
-                        error!("failed to set ACL for user {uname}: {e}");
-                        return Err(ValkeyError::Str("Failed to apply ACL rules"));
-                    }
+                let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+                if let Err(e) = ctx.call("ACL", &arg_refs[..]) {
+                    error!("failed to set ACL for user {uname}: {e}");
+                    return Err(ValkeyError::Str("Failed to apply ACL rules"));
                 }
 
                 match ctx.authenticate_client_with_acl_user(&username) {
