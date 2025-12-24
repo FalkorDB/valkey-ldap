@@ -55,6 +55,9 @@ class LdapTestCase(TestCase):
         vk.execute_command("CONFIG", "SET", "ldap.search_base", "dc=valkey,dc=io")
         vk.execute_command("CONFIG", "SET", "ldap.search_bind_dn", "cn=admin,dc=valkey,dc=io")
         vk.execute_command("CONFIG", "SET", "ldap.search_bind_passwd", "admin123!")
+        
+        # Configure to use 'description' attribute for ACL rules (for testing)
+        vk.execute_command("CONFIG", "SET", "ldap.groups_rules_attribute", "description")
 
         # Add users in Valkey
         vk.execute_command("ACL", "SETUSER", "user1", "ON", ">pass", "allcommands", "allkeys")
