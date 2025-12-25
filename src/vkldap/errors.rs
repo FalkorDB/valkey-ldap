@@ -54,8 +54,9 @@ impl VkLdapError {
                             // Use helper to strip null chars and normalize to lowercase for robust matching
                             let err_text = ldap_error_to_string(ldap_err).to_lowercase();
                             // Check for specific error codes and phrases indicating user not found
-                            err_text.contains("525")
-                                || err_text.contains("52e")
+                            // "data 525" is the typical AD format for user-not-found sub-code
+                            err_text.contains(" data 525")
+                                || err_text.contains(" data 52e")
                                 || err_text.contains("user not found")
                                 || err_text.contains("no such object")
                         }
