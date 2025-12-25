@@ -32,6 +32,27 @@ fn ldap_error_to_string(ldap_err: &LdapError) -> String {
     msg.replace('\0', "")
 }
 
+impl VkLdapError {
+    /// Returns true if the error indicates the user does not exist in LDAP
+    pub fn is_user_not_found(&self) -> bool {
+        match self {
+            // User not found in LDAP search
+            VkLdapError::NoLdapEntryFound(_) => true,
+            // Invalid credentials typically means bind failed - could be wrong password or non-existent user
+            // We check the LDAP error code: 49 (invalidCredentials) with specific data codes
+            VkLdapError::LdapBindError(ldap_err) => {
+                let err_str = ldap_err.to_string();
+                // LDAP error 49 with data codes indicating user not found:
+                // - 525: user not found
+                // - 52e: invalid credentials (but might be wrong password)
+                // We only delete on 525 (user not found) to avoid DoS from password typos
+                err_str.contains("525") || err_str.contains("user not found") || err_str.contains("no such object")
+            }
+            _ => false,
+        }
+    }
+}
+
 impl std::fmt::Display for VkLdapError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

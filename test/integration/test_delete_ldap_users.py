@@ -178,3 +178,46 @@ class DeleteLdapUsersTest(TestCase):
         # Verify default user still exists
         acl_list = self.client.execute_command('ACL', 'LIST')
         self.assertTrue(any('default' in user for user in acl_list))
+
+    def test_wrong_password_does_not_delete_user(self):
+        """Test that entering wrong password for existing LDAP user does NOT delete them from ACL
+        This prevents DoS attacks from password typos"""
+        # First, successfully authenticate user1 to create their ACL entry
+        user1_client = valkey.Valkey(
+            host='localhost',
+            port=6379,
+            username='user1',
+            password='user1@123',
+            decode_responses=True
+        )
+        self.assertTrue(user1_client.ping())
+        
+        # Verify user1 exists in ACL
+        acl_list = self.client.execute_command('ACL', 'LIST')
+        self.assertTrue(any('user1' in user for user in acl_list))
+        
+        # Try to authenticate with WRONG password (should fail but NOT delete the user)
+        with self.assertRaises(valkey.exceptions.AuthenticationError):
+            test_client = valkey.Valkey(
+                host='localhost',
+                port=6379,
+                username='user1',
+                password='wrongpassword',
+                decode_responses=True
+            )
+            test_client.ping()
+        
+        # Verify user1 still exists in ACL (NOT deleted because they exist in LDAP)
+        acl_list = self.client.execute_command('ACL', 'LIST')
+        self.assertTrue(any('user1' in user for user in acl_list))
+        
+        # Verify user1 can still authenticate with correct password
+        user1_client_retry = valkey.Valkey(
+            host='localhost',
+            port=6379,
+            username='user1',
+            password='user1@123',
+            decode_responses=True
+        )
+        self.assertTrue(user1_client_retry.ping())
+

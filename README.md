@@ -85,16 +85,18 @@ After creating the above user `bob` in Valkey, it will only be possible to authe
 
 When a user is deleted from LDAP but still exists in the Valkey ACL, the module automatically removes that user from Valkey's ACL on the next authentication attempt. This ensures that ACL entries stay synchronized with LDAP and prevents unauthorized access from stale user accounts.
 
-**Important Notes:**
+**Important Security Notes:**
 
 1. **Exempted users are never deleted**: Users matching the `ldap.exempted_users_regex` pattern are protected from automatic deletion, even if LDAP authentication fails.
 
-2. **Deletion triggers**: A user is deleted from ACL when:
+2. **Deletion only on "user not found"**: A user is deleted from ACL **only** when LDAP confirms the user does not exist. Wrong passwords or other transient failures will NOT trigger deletion, preventing denial-of-service attacks from password typos.
+
+3. **Deletion triggers**: A user is deleted from ACL when:
    - The user attempts to authenticate
-   - LDAP authentication fails (user not found in LDAP, wrong credentials, etc.)
+   - LDAP returns a "user not found" error (not just invalid credentials)
    - The user is not exempted from LDAP authentication
 
-3. **Protected users**: The `default` user and other system users that cannot be deleted by `ACL DELUSER` are automatically protected by Valkey's built-in safeguards.
+4. **Protected users**: The `default` user and other system users that cannot be deleted by `ACL DELUSER` are automatically protected by Valkey's built-in safeguards.
 
 ## Exempting Users from LDAP Authentication
 

@@ -57,11 +57,11 @@ fn auth_reply_callback(
                 debug!("failed to authenticate LDAP user {uname}");
                 error!("LDAP authentication failure: {err}");
 
-                // If user is not exempted from LDAP, delete them from ACL
-                // This ensures users deleted from LDAP are also removed from Valkey ACL
-                if !configs::is_user_exempted_from_ldap(&uname) {
+                // Only delete user from ACL if LDAP confirms the user does NOT exist
+                // This prevents DoS attacks from password typos or other transient failures
+                if err.is_user_not_found() && !configs::is_user_exempted_from_ldap(&uname) {
                     debug!(
-                        "deleting non-exempted user {uname} from ACL after LDAP authentication failure"
+                        "user {uname} not found in LDAP, deleting from ACL"
                     );
                     // Attempt to delete the user from ACL
                     match ctx.call("ACL", &["DELUSER", &uname]) {
