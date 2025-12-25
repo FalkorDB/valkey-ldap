@@ -46,7 +46,9 @@ impl VkLdapError {
                 // - 525: user not found
                 // - 52e: invalid credentials (but might be wrong password)
                 // We only delete on 525 (user not found) to avoid DoS from password typos
-                err_str.contains("525") || err_str.contains("user not found") || err_str.contains("no such object")
+                err_str.contains("525")
+                    || err_str.contains("user not found")
+                    || err_str.contains("no such object")
             }
             _ => false,
         }
