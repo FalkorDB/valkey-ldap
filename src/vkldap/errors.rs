@@ -51,9 +51,13 @@ impl VkLdapError {
                         32 => true, // noSuchObject - user definitively doesn't exist
                         49 => {
                             // invalidCredentials - check diagnostic text for user-not-found sub-code
-                            // Only delete if we see 525 hex (0x525) or explicit "user not found"
-                            // Avoid generic string matching to prevent false positives
-                            result.text.contains("525") || result.text.contains("52e")
+                            // Use helper to strip null chars and normalize to lowercase for robust matching
+                            let err_text = ldap_error_to_string(ldap_err).to_lowercase();
+                            // Check for specific error codes and phrases indicating user not found
+                            err_text.contains("525")
+                                || err_text.contains("52e")
+                                || err_text.contains("user not found")
+                                || err_text.contains("no such object")
                         }
                         _ => false,
                     }
