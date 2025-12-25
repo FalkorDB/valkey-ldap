@@ -53,8 +53,26 @@ fn auth_reply_callback(
                 }
             }
             Err(err) => {
-                debug!("failed to authenticate LDAP user {username}");
+                let uname = username.to_string();
+                debug!("failed to authenticate LDAP user {uname}");
                 error!("LDAP authentication failure: {err}");
+
+                // Only delete user from ACL if LDAP confirms the user does NOT exist
+                // This prevents DoS attacks from password typos or other transient failures
+                if err.is_user_not_found() && !configs::is_user_exempted_from_ldap(&uname) {
+                    debug!("user {uname} not found in LDAP, deleting from ACL");
+                    // Attempt to delete the user from ACL
+                    match ctx.call("ACL", &["DELUSER", &uname]) {
+                        Ok(_) => {
+                            debug!("successfully deleted user {uname} from ACL");
+                        }
+                        Err(e) => {
+                            // Log but don't fail - user might not exist in ACL or be undeletable (like default)
+                            debug!("could not delete user {uname} from ACL: {e}");
+                        }
+                    }
+                }
+
                 Ok(AUTH_NOT_HANDLED)
             }
         }
