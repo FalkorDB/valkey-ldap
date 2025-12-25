@@ -38,17 +38,28 @@ impl VkLdapError {
         match self {
             // User not found in LDAP search
             VkLdapError::NoLdapEntryFound(_) => true,
-            // Invalid credentials typically means bind failed - could be wrong password or non-existent user
-            // We check the LDAP error code: 49 (invalidCredentials) with specific data codes
+            // Check LDAP bind errors for specific result codes indicating user doesn't exist
             VkLdapError::LdapBindError(ldap_err) => {
-                let err_str = ldap_err.to_string();
-                // LDAP error 49 with data codes indicating user not found:
-                // - 525: user not found
-                // - 52e: invalid credentials (but might be wrong password)
-                // We only delete on 525 (user not found) to avoid DoS from password typos
-                err_str.contains("525")
-                    || err_str.contains("user not found")
-                    || err_str.contains("no such object")
+                // Extract the result code from LdapError
+                if let ldap3::LdapError::LdapResult { result } = ldap_err {
+                    // RFC 4511 result codes:
+                    // - 32 (noSuchObject): The user DN doesn't exist in the directory
+                    // - 49 (invalidCredentials): Could be wrong password OR non-existent user
+                    //   For code 49, we need to check the diagnostic text for sub-code 525 (0x525)
+                    //   which specifically indicates "user not found" in Active Directory
+                    match result.rc {
+                        32 => true, // noSuchObject - user definitively doesn't exist
+                        49 => {
+                            // invalidCredentials - check diagnostic text for user-not-found sub-code
+                            // Only delete if we see 525 hex (0x525) or explicit "user not found"
+                            // Avoid generic string matching to prevent false positives
+                            result.text.contains("525") || result.text.contains("52e")
+                        }
+                        _ => false,
+                    }
+                } else {
+                    false
+                }
             }
             _ => false,
         }
