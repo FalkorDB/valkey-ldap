@@ -54,9 +54,17 @@ impl VkLdapError {
                             // Use helper to strip null chars and normalize to lowercase for robust matching
                             let err_text = ldap_error_to_string(ldap_err).to_lowercase();
                             // Check for specific error codes and phrases indicating user not found
-                            // "data 525" is the typical AD format for user-not-found sub-code
+                            // AD sub-codes (in hex):
+                            // - 525: user not found (safe to delete)
+                            // - 52e: invalid credentials/wrong password (DO NOT delete - prevents DoS)
+                            // - 530: not permitted to logon at this time
+                            // - 531: not permitted to logon at this workstation
+                            // - 532: password expired
+                            // - 533: account disabled
+                            // - 701: account expired
+                            // - 773: user must reset password
+                            // Only delete on 525 (user not found)
                             err_text.contains(" data 525")
-                                || err_text.contains(" data 52e")
                                 || err_text.contains("user not found")
                                 || err_text.contains("no such object")
                         }
