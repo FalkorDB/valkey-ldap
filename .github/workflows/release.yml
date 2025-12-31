@@ -2,12 +2,17 @@ name: Release module
 
 on:
     workflow_dispatch:
+        inputs:
+            release_version:
+                description: "Version to release (e.g., 1.2.3)"
+                required: true
     push:
         tags:
             - "v*.*.*"
+
 jobs:
     release:
-        name: Release
+        name: Release - ${{ matrix.arch }}
         strategy:
             matrix:
                 include:
@@ -15,83 +20,51 @@ jobs:
                       runner: ubuntu-latest
                       target: x86_64-unknown-linux-gnu
                     - arch: arm64
-                      runner: ubuntu-latest
+                      runner: ubuntu-24.04-arm
                       target: aarch64-unknown-linux-gnu
         runs-on: ${{ matrix.runner }}
-        permissions:
-            contents: write
         steps:
-            - name: Checkout code
-              uses: actions/checkout@v6
-
+            - name: Install OpenSSL development libraries
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y libssl-dev
+            - name: Checkout
+              uses: actions/checkout@v4
             - name: Set up Rust
               uses: dtolnay/rust-toolchain@1.87.0
-
             - name: Add Rust target
               run: rustup target add ${{ matrix.target }}
-
-            - name: Set up OpenSSL, Clang, and cross toolchain
-              run: |
-                sudo apt-get update
-                if [ "${{ matrix.arch }}" = "amd64" ]; then
-                  sudo apt-get install -y libssl-dev pkg-config llvm-dev libclang-dev
-                  echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig" >> $GITHUB_ENV
-                  echo "PKG_CONFIG_LIBDIR=/usr/lib/x86_64-linux-gnu/pkgconfig" >> $GITHUB_ENV
-                  if [ -d /usr/lib/x86_64-linux-gnu ]; then
-                    echo "OPENSSL_LIB_DIR=/usr/lib/x86_64-linux-gnu" >> $GITHUB_ENV
-                  else
-                    echo "OPENSSL_LIB_DIR=/usr/lib" >> $GITHUB_ENV
-                  fi
-                  echo "OPENSSL_INCLUDE_DIR=/usr/include/openssl" >> $GITHUB_ENV
-                  if [ -d /usr/lib/llvm-17/lib ]; then
-                    echo "LIBCLANG_PATH=/usr/lib/llvm-17/lib" >> $GITHUB_ENV
-                  elif [ -d /usr/lib/llvm-16/lib ]; then
-                    echo "LIBCLANG_PATH=/usr/lib/llvm-16/lib" >> $GITHUB_ENV
-                  fi
-                else
-                  sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user-static libssl-dev:arm64 pkg-config-aarch64-linux-gnu llvm-dev libclang-dev
-                  echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-                  echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
-                  echo "PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig" >> $GITHUB_ENV
-                  echo "OPENSSL_DIR=/usr/lib/aarch64-linux-gnu" >> $GITHUB_ENV
-                  echo "OPENSSL_LIB_DIR=/usr/lib/aarch64-linux-gnu" >> $GITHUB_ENV
-                  echo "OPENSSL_INCLUDE_DIR=/usr/include/openssl" >> $GITHUB_ENV
-                  echo "PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig" >> $GITHUB_ENV
-                fi
-
-            - name: Build for ${{ matrix.arch }}
-              run: |
-                  cargo build --release --target ${{ matrix.target }}
-
-            - name: Copy .so to known location
-              run: |
-                  mkdir -p dist
-                  cp target/${{ matrix.target }}/release/libvalkey_ldap.so dist/libvalkey_ldap-${{ matrix.arch }}.so
-
+            - name: Build shared library
+              run: cargo build --release --target ${{ matrix.target }}
+            - name: Rename .so for arch
+              run: mv target/${{ matrix.target }}/release/libvalkey_ldap.so target/${{ matrix.target }}/release/libvalkey_ldap-${{ matrix.arch }}.so
             - name: Upload .so artifact
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v6
               with:
                   name: valkey-ldap-${{ matrix.arch }}.so
-                  path: dist/libvalkey_ldap-${{ matrix.arch }}.so
+                  path: target/${{ matrix.target }}/release/libvalkey_ldap-${{ matrix.arch }}.so
 
     publish-release:
         name: Publish Release
         needs: release
         runs-on: ubuntu-latest
-        permissions:
-            contents: write
         steps:
             - name: Download all artifacts
-              uses: actions/download-artifact@v4
+              uses: actions/download-artifact@v7
               with:
                   path: ./artifacts
+                  pattern: "valkey-ldap-*.so"
+
+            - name: Move .so files to root artifacts dir
+              run: |
+                find ./artifacts -name 'libvalkey_ldap-*.so' -exec mv {} ./artifacts/ \;
 
             - name: Create GitHub Release
               uses: softprops/action-gh-release@v2
               with:
-                  files: ./artifacts/**/*.so
-                  name: ${{ github.ref_name }}
-                  tag_name: ${{ github.ref_name }}
-                  draft: true
+                files: ./artifacts/libvalkey_ldap-*.so
+                name: ${{ github.event.inputs.release_version || github.ref_name }}
+                tag_name: ${{ github.event.inputs.release_version || github.ref_name }}
+                draft: true
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
