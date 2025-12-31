@@ -56,7 +56,9 @@ jobs:
             - name: Create GitHub Release
               uses: softprops/action-gh-release@v2
               with:
-                  files: "./artifacts/*"
+                  files: |
+                      ./artifacts/valkey-ldap-amd64.so
+                      ./artifacts/valkey-ldap-arm64.so
                   name: ${{ github.event.inputs.release_version || github.ref_name }}
                   tag_name: ${{ github.event.inputs.release_version || github.ref_name }}
                   draft: true
