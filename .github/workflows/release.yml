@@ -2,6 +2,10 @@ name: Release module
 
 on:
     workflow_dispatch:
+        inputs:
+            release_version:
+                description: "Version to release (e.g., 1.2.3)"
+                required: true
     push:
         tags:
             - "v*.*.*"
@@ -24,6 +28,7 @@ jobs:
               run: |
                   sudo apt-get update
                   sudo apt-get install -y libssl-dev
+                  OPENSSL_DIR=$(dirname $(dirname $(which openssl)))
             - name: Build shared library
               uses: houseabsolute/actions-rust-cross@v1
               with:
@@ -51,8 +56,8 @@ jobs:
               uses: softprops/action-gh-release@v2
               with:
                   files: ./artifacts/**/*.so
-                  name: ${{ github.ref_name }}
-                  tag_name: ${{ github.ref_name }}
+                  name: ${{ github.event.inputs.release_version || github.ref_name }}
+                  tag_name: ${{ github.event.inputs.release_version || github.ref_name }}
                   draft: true
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
