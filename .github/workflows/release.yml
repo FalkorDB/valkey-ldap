@@ -37,10 +37,10 @@ jobs:
             - name: Build shared library
               run: cargo build --release --target ${{ matrix.target }}
             - name: Upload .so artifact
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: valkey-ldap-${{ matrix.arch }}.so
-                  path: target/${{ matrix.target }}/release/valkey-ldap-${{ matrix.arch }}.so
+                  path: target/${{ matrix.target }}/release/libvalkey_ldap.so
 
     publish-release:
         name: Publish Release
@@ -48,14 +48,15 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Download all artifacts
-              uses: actions/download-artifact@v4
+              uses: actions/download-artifact@v7
               with:
                   path: ./artifacts
+                  pattern: "valkey-ldap-*.so"
 
             - name: Create GitHub Release
               uses: softprops/action-gh-release@v2
               with:
-                  files: ./artifacts/**/*.so
+                  files: "./artifacts/*"
                   name: ${{ github.event.inputs.release_version || github.ref_name }}
                   tag_name: ${{ github.event.inputs.release_version || github.ref_name }}
                   draft: true
