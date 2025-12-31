@@ -1,0 +1,69 @@
+name: Release module
+
+on:
+    workflow_dispatch:
+    push:
+        tags:
+            - "v*.*.*"
+jobs:
+    release:
+        name: Release
+        strategy:
+            matrix:
+                include:
+                    - arch: amd64
+                      runner: ubuntu-latest
+                    - arch: arm64
+                      runner: ubuntu-24.04
+        runs-on: ${{ matrix.runner }}
+        permissions:
+            contents: write
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up Rust
+              uses: actions-rs/toolchain@v1
+              with:
+                  toolchain: 1.87.0
+                  override: true
+
+            - name: Build for ${{ matrix.arch }}
+              run: |
+                  cargo build --release --target $(if [ "${{ matrix.arch }}" = "amd64" ]; then echo x86_64-unknown-linux-gnu; else echo aarch64-unknown-linux-gnu; fi)
+
+            - name: Copy .so to known location
+              run: |
+                  mkdir -p dist
+                  find target -type f -name 'libvalkey_ldap.so' -exec cp {} dist/libvalkey_ldap-${{ matrix.arch }}.so \;
+
+            - name: Upload .so artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: valkey-ldap-${{ matrix.arch }}.so
+                  path: dist/libvalkey_ldap-${{ matrix.arch }}.so
+
+        outputs:
+            so_paths: ${{ steps.upload-artifact.outputs.artifact-paths }}
+
+    publish-release:
+        name: Publish Release
+        needs: release
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - name: Download all artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: ./artifacts
+
+            - name: Create GitHub Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: ./artifacts/**/*.so
+                  name: ${{ github.ref_name }}
+                  tag_name: ${{ github.ref_name }}
+                  draft: true
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
