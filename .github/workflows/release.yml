@@ -17,19 +17,13 @@ jobs:
             matrix:
                 platform:
                     - os-name: Linux-x86_64
-                      target: x86_64-unknown-linux-gnu
+                      target: x86_64-unknown-linux-musl
                     - os-name: Linux-aarch64
-                      target: aarch64-unknown-linux-gnu
+                      target: aarch64-unknown-linux-musl
         runs-on: ubuntu-latest
         steps:
             - name: Checkout
               uses: actions/checkout@v6
-            - name: Install OpenSSL development libraries
-              if: matrix.platform.target == 'x86_64-unknown-linux-gnu'
-              run: |
-                  sudo apt-get update
-                  sudo apt-get install -y libssl-dev
-                  OPENSSL_DIR=$(dirname $(dirname $(which openssl)))
             - name: Build shared library
               uses: houseabsolute/actions-rust-cross@v1
               with:
