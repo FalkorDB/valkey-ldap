@@ -1,0 +1,76 @@
+name: Release module
+
+on:
+    workflow_dispatch:
+    push:
+        tags:
+            - "v*.*.*"
+jobs:
+    release:
+        name: Release
+        strategy:
+            matrix:
+                include:
+                    - arch: amd64
+                      runner: ubuntu-latest
+                      target: x86_64-unknown-linux-gnu
+                    - arch: arm64
+                      runner: ubuntu-24.04
+                      target: aarch64-unknown-linux-gnu
+        runs-on: ${{ matrix.runner }}
+        permissions:
+            contents: write
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v6
+
+            - name: Set up Rust
+              uses: dtolnay/rust-toolchain@1.87.0
+
+            - name: Add Rust target
+              run: rustup target add ${{ matrix.target }}
+
+            - name: Set up cross-compilation for ARM64
+              if: matrix.arch == 'arm64'
+              run: |
+                sudo apt-get update
+                sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user-static
+                echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+
+            - name: Build for ${{ matrix.arch }}
+              run: |
+                cargo build --release --target ${{ matrix.target }}
+
+            - name: Copy .so to known location
+              run: |
+                mkdir -p dist
+                cp target/${{ matrix.target }}/release/libvalkey_ldap.so dist/libvalkey_ldap-${{ matrix.arch }}.so
+
+            - name: Upload .so artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: valkey-ldap-${{ matrix.arch }}.so
+                  path: dist/libvalkey_ldap-${{ matrix.arch }}.so
+
+
+    publish-release:
+        name: Publish Release
+        needs: release
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - name: Download all artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: ./artifacts
+
+            - name: Create GitHub Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: ./artifacts/**/*.so
+                  name: ${{ github.ref_name }}
+                  tag_name: ${{ github.ref_name }}
+                  draft: true
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
