@@ -40,7 +40,7 @@ jobs:
               uses: actions/upload-artifact@v4
               with:
                   name: valkey-ldap-${{ matrix.arch }}.so
-                  path: target/${{ matrix.target }}/release/libvalkey_ldap.so
+                  path: target/${{ matrix.target }}/release/valkey-ldap-${{ matrix.arch }}.so
 
     publish-release:
         name: Publish Release
