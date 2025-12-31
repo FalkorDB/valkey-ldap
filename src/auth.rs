@@ -12,20 +12,67 @@ fn auth_reply_callback(
     ctx: &Context,
     username: ValkeyString,
     _: ValkeyString,
-    priv_data: Option<&Result<(), VkLdapError>>,
+    priv_data: Option<&Result<Vec<String>, VkLdapError>>,
 ) -> Result<c_int, ValkeyError> {
     if let Some(res) = priv_data {
         match res {
-            Ok(_) => match ctx.authenticate_client_with_acl_user(&username) {
-                Status::Ok => {
-                    debug!("successfully authenticated LDAP user {username}");
-                    Ok(AUTH_HANDLED)
+            Ok(tokens_from_ldap) => {
+                // Always apply ACL reset and default rules for LDAP-authenticated users
+                // This ensures users removed from all groups don't retain stale permissions
+                // Build ACL rules: reset commands/keys/channels + defaults + LDAP-provided tokens
+                let mut rule_tokens: Vec<String> = Vec::new();
+
+                // Reset all permissions first to avoid accumulation
+                rule_tokens.push("resetkeys".to_string());
+                rule_tokens.push("resetchannels".to_string());
+                rule_tokens.push("-@all".to_string());
+
+                // Add default rules and LDAP tokens (even if empty)
+                rule_tokens.extend(configs::get_default_acl_rules(ctx));
+                rule_tokens.extend(tokens_from_ldap.iter().cloned());
+
+                // Apply ACL SETUSER <username> <rules...>
+                let uname = username.to_string();
+                let mut args: Vec<String> = Vec::with_capacity(2 + rule_tokens.len());
+                args.push("SETUSER".to_string());
+                args.push(uname.clone());
+                args.extend(rule_tokens);
+
+                let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+                if let Err(e) = ctx.call("ACL", &arg_refs[..]) {
+                    error!("failed to set ACL for user {uname}: {e}");
+                    return Err(ValkeyError::Str("Failed to apply ACL rules"));
                 }
-                Status::Err => Err(ValkeyError::Str("Failed to authenticate with ACL")),
-            },
+
+                match ctx.authenticate_client_with_acl_user(&username) {
+                    Status::Ok => {
+                        debug!("successfully authenticated LDAP user {username}");
+                        Ok(AUTH_HANDLED)
+                    }
+                    Status::Err => Err(ValkeyError::Str("Failed to authenticate with ACL")),
+                }
+            }
             Err(err) => {
-                debug!("failed to authenticate LDAP user {username}");
+                let uname = username.to_string();
+                debug!("failed to authenticate LDAP user {uname}");
                 error!("LDAP authentication failure: {err}");
+
+                // Only delete user from ACL if LDAP confirms the user does NOT exist
+                // This prevents DoS attacks from password typos or other transient failures
+                if err.is_user_not_found() && !configs::is_user_exempted_from_ldap(&uname) {
+                    debug!("user {uname} not found in LDAP, deleting from ACL");
+                    // Attempt to delete the user from ACL
+                    match ctx.call("ACL", &["DELUSER", &uname]) {
+                        Ok(_) => {
+                            debug!("successfully deleted user {uname} from ACL");
+                        }
+                        Err(e) => {
+                            // Log but don't fail - user might not exist in ACL or be undeletable (like default)
+                            debug!("could not delete user {uname} from ACL: {e}");
+                        }
+                    }
+                }
+
                 Ok(AUTH_NOT_HANDLED)
             }
         }
@@ -36,7 +83,7 @@ fn auth_reply_callback(
     }
 }
 
-fn free_callback(_: &Context, _: Result<(), VkLdapError>) {}
+fn free_callback(_: &Context, _: Result<Vec<String>, VkLdapError>) {}
 
 pub fn ldap_auth_blocking_callback(
     ctx: &Context,
@@ -47,27 +94,35 @@ pub fn ldap_auth_blocking_callback(
         return Ok(AUTH_NOT_HANDLED);
     }
 
+    let user_str = username.to_string();
+
+    // Check if the user is exempted from LDAP authentication
+    if configs::is_user_exempted_from_ldap(&user_str) {
+        debug!("user {user_str} is exempted from LDAP authentication");
+        return Ok(AUTH_NOT_HANDLED);
+    }
+
     debug!("starting authentication for user={username}");
 
     let use_bind_mode = configs::is_bind_mode(ctx);
 
-    let user_str = username.to_string();
     let pass_str = password.to_string();
 
     let blocked_client = ctx.block_client_on_auth(auth_reply_callback, Some(free_callback));
 
-    let callback = move |blocked_client: Option<BlockedClient<Result<(), VkLdapError>>>, result| {
-        assert!(blocked_client.is_some());
-        let mut blocked_client = blocked_client.unwrap();
-        if let Err(e) = blocked_client.set_blocked_private_data(result) {
-            error!("failed to set the auth callback result: {e}");
-        }
-    };
+    let callback =
+        move |blocked_client: Option<BlockedClient<Result<Vec<String>, VkLdapError>>>, result| {
+            assert!(blocked_client.is_some());
+            let mut blocked_client = blocked_client.unwrap();
+            if let Err(e) = blocked_client.set_blocked_private_data(result) {
+                error!("failed to set the auth callback result: {e}");
+            }
+        };
 
     let res = if use_bind_mode {
-        vkldap::vk_ldap_bind(user_str, pass_str, callback, blocked_client)
+        vkldap::vk_ldap_bind_and_group_rules(user_str, pass_str, callback, blocked_client)
     } else {
-        vkldap::vk_ldap_search_and_bind(user_str, pass_str, callback, blocked_client)
+        vkldap::vk_ldap_search_bind_and_group_rules(user_str, pass_str, callback, blocked_client)
     };
 
     match res {

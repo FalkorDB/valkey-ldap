@@ -45,6 +45,9 @@ class LdapModuleBindTest(LdapTestCase):
         self.vk.execute_command("CONFIG", "SET", "ldap.auth_mode", "bind")
 
         self.vk.execute_command(
+            "CONFIG", "SET", "ldap.bind_dn_prefix", "cn="
+        )
+        self.vk.execute_command(
             "CONFIG", "SET", "ldap.bind_dn_suffix", ",OU=devops,DC=valkey,DC=io"
         )
 
@@ -88,9 +91,13 @@ class LdapModuleBindTest(LdapTestCase):
         self.assertTrue(resp.decode() == "user1")
 
     def test_ldap_failed_auth_but_locally_successfull(self):
+        # Exempt user1 from LDAP so it won't be deleted on LDAP auth failure
+        self.vk.execute_command("CONFIG", "SET", "ldap.exempted_users_regex", "^user1$")
         self.vk.execute_command("AUTH", "user1", "pass")
         resp = self.vk.execute_command("ACL", "WHOAMI")
         self.assertTrue(resp.decode() == "user1")
+        # Clear exemption pattern after test
+        self.vk.execute_command("CONFIG", "SET", "ldap.exempted_users_regex", "")
 
 
 class LdapModuleBindAndSearchTest(LdapTestCase):

@@ -72,9 +72,21 @@ pub mod standard_log_implementation {
 
         fn init(&self, context: &Context) {
             let mut ctx = self.context.lock().unwrap();
+            // Free the old context if it exists
+            if !ctx.is_null() {
+                unsafe { raw::RedisModule_FreeThreadSafeContext.unwrap()(*ctx) };
+            }
             let detached_ctx =
                 unsafe { raw::RedisModule_GetDetachedThreadSafeContext.unwrap()(context.ctx) };
             *ctx = detached_ctx;
+        }
+
+        fn deinit(&self) {
+            let mut ctx = self.context.lock().unwrap();
+            if !ctx.is_null() {
+                unsafe { raw::RedisModule_FreeThreadSafeContext.unwrap()(*ctx) };
+                *ctx = std::ptr::null_mut();
+            }
         }
     }
 
@@ -115,6 +127,15 @@ pub mod standard_log_implementation {
         log::set_logger(logger).map(|()| log::set_max_level(log::LevelFilter::Trace))
     }
 
+    /// Tears down the logger by freeing the thread-safe context.
+    /// This should be called during module deinitialization to prevent
+    /// use-after-free errors when the module is unloaded and reloaded.
+    #[allow(dead_code)]
+    pub fn teardown() {
+        let logger = logger();
+        logger.deinit();
+    }
+
     fn logger() -> &'static ValkeyGlobalLogger {
         static LOGGER: OnceLock<ValkeyGlobalLogger> = OnceLock::new();
         LOGGER.get_or_init(|| ValkeyGlobalLogger::new())
@@ -144,7 +165,10 @@ pub mod standard_log_implementation {
             };
 
             let ctx = self.context.lock().unwrap();
-            log_internal(*ctx, record.level(), &message);
+            // Only log if we have a valid context
+            if !ctx.is_null() {
+                log_internal(*ctx, record.level(), &message);
+            }
         }
 
         fn flush(&self) {

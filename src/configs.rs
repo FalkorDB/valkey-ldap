@@ -1,7 +1,9 @@
 use std::collections::LinkedList;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use lazy_static::lazy_static;
+use regex::Regex;
 use valkey_module::{
     ConfigurationValue, ValkeyError, ValkeyGILGuard, ValkeyLockIndicator, ValkeyString,
     configuration::ConfigurationContext,
@@ -106,6 +108,30 @@ lazy_static! {
     pub static ref LDAP_FAILURE_DETECTOR_INTERVAL: ValkeyGILGuard<i64> = ValkeyGILGuard::new(1);
     pub static ref LDAP_TIMEOUT_CONNECTION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(10);
     pub static ref LDAP_TIMEOUT_LDAP_OPERATION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(10);
+    // Group/authorization configs
+    pub static ref LDAP_GROUPS_SEARCH_BASE: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, ""));
+    pub static ref LDAP_GROUPS_FILTER: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, "objectClass=groupOfNames"));
+    pub static ref LDAP_GROUPS_MEMBER_ATTRIBUTE: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, "member"));
+    pub static ref LDAP_GROUPS_NAME_ATTRIBUTE: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, "cn"));
+    pub static ref LDAP_GROUPS_RULES_ATTRIBUTE: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, "valkeyACL"));
+    pub static ref LDAP_GROUP_TO_ACL_USER_MAP: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, ""));
+    // Dynamic ACL sync: map LDAP groups to ACL rule fragments, and default rules
+    pub static ref LDAP_GROUP_TO_ACL_RULES_MAP: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, ""));
+    pub static ref LDAP_DEFAULT_ACL_RULES: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, "on resetpass"));
+    pub static ref LDAP_EXEMPTED_USERS_REGEX: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, ""));
+}
+
+lazy_static! {
+    static ref EXEMPTED_USERS_REGEX_CACHE: Mutex<Option<Regex>> = Mutex::new(None);
 }
 
 pub fn refresh_ldap_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
@@ -120,8 +146,34 @@ pub fn refresh_ldap_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
         get_search_bind_passwd(ctx),
         get_search_dn_attribute(ctx),
         get_timeout_ldap_operation(ctx),
+        get_groups_search_base(ctx),
+        get_groups_filter(ctx),
+        get_groups_member_attribute(ctx),
+        get_groups_name_attribute(ctx),
+        get_groups_rules_attribute(ctx),
     );
     vkldap::refresh_ldap_settings(settings);
+}
+
+pub fn refresh_ldap_settings_cache_blocking<T: ValkeyLockIndicator>(ctx: &T) {
+    let settings = VkLdapSettings::new(
+        get_bind_dn_prefix(ctx),
+        get_bind_dn_suffix(ctx),
+        get_search_base(ctx),
+        get_search_scope(ctx),
+        get_search_filter(ctx),
+        get_search_attribute(ctx),
+        get_search_bind_dn(ctx),
+        get_search_bind_passwd(ctx),
+        get_search_dn_attribute(ctx),
+        get_timeout_ldap_operation(ctx),
+        get_groups_search_base(ctx),
+        get_groups_filter(ctx),
+        get_groups_member_attribute(ctx),
+        get_groups_name_attribute(ctx),
+        get_groups_rules_attribute(ctx),
+    );
+    vkldap::refresh_ldap_settings_blocking(settings);
 }
 
 pub fn refresh_connection_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
@@ -134,6 +186,18 @@ pub fn refresh_connection_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
         get_timeout_connection(ctx),
     );
     vkldap::refresh_connection_settings(settings);
+}
+
+pub fn refresh_connection_settings_cache_blocking<T: ValkeyLockIndicator>(ctx: &T) {
+    let settings = VkConnectionSettings::new(
+        is_starttls_enabled(ctx),
+        get_tls_ca_cert_path(ctx),
+        get_tls_cert_path(ctx),
+        get_tls_key_path(ctx),
+        get_connection_pool_size(ctx),
+        get_timeout_connection(ctx),
+    );
+    vkldap::refresh_connection_settings_blocking(settings);
 }
 
 pub fn process_server_list(server_list: String) -> Result<(), ValkeyError> {
@@ -321,6 +385,50 @@ pub fn get_search_dn_attribute<T: ValkeyLockIndicator>(ctx: &T) -> String {
     dn_attribute.to_string()
 }
 
+pub fn get_groups_search_base<T: ValkeyLockIndicator>(ctx: &T) -> Option<String> {
+    // If empty, fall back to user search base
+    let base = LDAP_GROUPS_SEARCH_BASE.lock(ctx);
+    let base_str = base.to_string();
+    match base_str.as_str() {
+        "" => get_search_base(ctx),
+        _ => Some(base_str),
+    }
+}
+
+pub fn get_groups_filter<T: ValkeyLockIndicator>(ctx: &T) -> Option<String> {
+    let filter = LDAP_GROUPS_FILTER.lock(ctx);
+    let fstr = filter.to_string();
+    match fstr.as_str() {
+        "" => None,
+        _ => Some(fstr),
+    }
+}
+
+pub fn get_groups_member_attribute<T: ValkeyLockIndicator>(ctx: &T) -> String {
+    let attr = LDAP_GROUPS_MEMBER_ATTRIBUTE.lock(ctx);
+    attr.to_string()
+}
+
+pub fn get_groups_name_attribute<T: ValkeyLockIndicator>(ctx: &T) -> String {
+    let attr = LDAP_GROUPS_NAME_ATTRIBUTE.lock(ctx);
+    attr.to_string()
+}
+
+pub fn get_groups_rules_attribute<T: ValkeyLockIndicator>(ctx: &T) -> String {
+    let attr = LDAP_GROUPS_RULES_ATTRIBUTE.lock(ctx);
+    attr.to_string()
+}
+
+pub fn get_default_acl_rules<T: ValkeyLockIndicator>(ctx: &T) -> Vec<String> {
+    let rules_guard = LDAP_DEFAULT_ACL_RULES.lock(ctx);
+    let rules = rules_guard.to_string();
+    rules
+        .split_whitespace()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect()
+}
+
 pub fn get_connection_pool_size<T: ValkeyLockIndicator>(ctx: &T) -> usize {
     let pool_size = LDAP_CONNECTION_POOL_SIZE.lock(ctx);
     *pool_size as usize
@@ -339,4 +447,71 @@ pub fn get_timeout_connection<T: ValkeyLockIndicator>(ctx: &T) -> Duration {
 pub fn get_timeout_ldap_operation<T: ValkeyLockIndicator>(ctx: &T) -> Duration {
     let timeout = LDAP_TIMEOUT_LDAP_OPERATION.lock(ctx);
     Duration::from_secs(*timeout as u64)
+}
+
+#[allow(dead_code)]
+pub fn get_exempted_users_regex_pattern<T: ValkeyLockIndicator>(ctx: &T) -> String {
+    let pattern = LDAP_EXEMPTED_USERS_REGEX.lock(ctx);
+    pattern.to_string()
+}
+
+pub fn is_user_exempted_from_ldap(username: &str) -> bool {
+    // Handle poisoned mutex gracefully by assuming no exemption
+    let regex_guard = match EXEMPTED_USERS_REGEX_CACHE.lock() {
+        Ok(guard) => guard,
+        Err(_) => {
+            error!("exempted users regex cache mutex is poisoned. Assuming no user is exempted.");
+            return false;
+        }
+    };
+    if let Some(regex) = regex_guard.as_ref() {
+        regex.is_match(username)
+    } else {
+        false
+    }
+}
+
+pub fn exempted_users_regex_set_callback(
+    config_ctx: &ConfigurationContext,
+    _: &str,
+    value: &'static ValkeyGILGuard<ValkeyString>,
+) -> Result<(), ValkeyError> {
+    let pattern_str = value.get(config_ctx).to_string_lossy();
+
+    // Empty pattern clears the exemption list
+    if pattern_str.is_empty() {
+        let mut cache = match EXEMPTED_USERS_REGEX_CACHE.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                error!("exempted users regex cache mutex is poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
+        *cache = None;
+        debug!("cleared exempted users regex pattern");
+        return Ok(());
+    }
+
+    // Validate the regex pattern
+    match Regex::new(&pattern_str) {
+        Ok(regex) => {
+            let mut cache = match EXEMPTED_USERS_REGEX_CACHE.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    error!("exempted users regex cache mutex is poisoned, recovering");
+                    poisoned.into_inner()
+                }
+            };
+            *cache = Some(regex);
+            debug!("set exempted users regex pattern: {}", pattern_str);
+            Ok(())
+        }
+        Err(err) => {
+            error!("invalid regex pattern '{}': {}", pattern_str, err);
+            Err(ValkeyError::String(format!(
+                "Invalid regex pattern: {}",
+                err
+            )))
+        }
+    }
 }
