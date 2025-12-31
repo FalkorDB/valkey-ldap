@@ -12,30 +12,35 @@ on:
 
 jobs:
     release:
-        name: Release - ${{ matrix.platform.os-name }}
+        name: Release - ${{ matrix.arch }}
         strategy:
             matrix:
-                platform:
-                    - os-name: Linux-x86_64
-                      target: x86_64-unknown-linux-musl
-                    - os-name: Linux-aarch64
-                      target: aarch64-unknown-linux-musl
-        runs-on: ubuntu-latest
+                include:
+                    - arch: amd64
+                      runner: ubuntu-latest
+                      target: x86_64-unknown-linux-gnu
+                    - arch: arm64
+                      runner: ubuntu-24.04-arm
+                      target: aarch64-unknown-linux-gnu
+        runs-on: ${{ matrix.runner }}
         steps:
+            - name: Install OpenSSL development libraries
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y libssl-dev
             - name: Checkout
-              uses: actions/checkout@v6
+              uses: actions/checkout@v4
+            - name: Set up Rust
+              uses: dtolnay/rust-toolchain@1.87.0
+            - name: Add Rust target
+              run: rustup target add ${{ matrix.target }}
             - name: Build shared library
-              uses: houseabsolute/actions-rust-cross@v1
-              with:
-                  command: build
-                  target: ${{ matrix.platform.target }}
-                  args: "--locked --release"
-                  strip: false
+              run: cargo build --release --target ${{ matrix.target }}
             - name: Upload .so artifact
               uses: actions/upload-artifact@v4
               with:
-                  name: valkey-ldap-${{ matrix.platform.os-name }}.so
-                  path: target/${{ matrix.platform.target }}/release/libvalkey_ldap.so
+                  name: valkey-ldap-${{ matrix.arch }}.so
+                  path: target/${{ matrix.target }}/release/libvalkey_ldap.so
 
     publish-release:
         name: Publish Release
