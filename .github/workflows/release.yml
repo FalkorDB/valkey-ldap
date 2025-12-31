@@ -37,7 +37,7 @@ jobs:
             - name: Build shared library
               run: cargo build --release --target ${{ matrix.target }}
             - name: Upload .so artifact
-              uses: actions/upload-artifact@v7
+              uses: actions/upload-artifact@v6
               with:
                   name: valkey-ldap-${{ matrix.arch }}.so
                   path: target/${{ matrix.target }}/release/libvalkey_ldap.so
