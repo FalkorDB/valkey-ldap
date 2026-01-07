@@ -69,7 +69,7 @@ jobs:
                     --output type=local,dest=./output \
                     .
             - name: Rename artifact
-              run: mv output/libvalkey_ldap.so output/libvalkey_ldap-${{ matrix.arch }}.so
+              run: mv output/output/libvalkey_ldap.so output/libvalkey_ldap-${{ matrix.arch }}.so
             - name: Upload artifact
               uses: actions/upload-artifact@v6
               with:
