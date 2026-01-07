@@ -11,8 +11,8 @@ on:
             - "v*.*.*"
 
 jobs:
-    release:
-        name: Release - ${{ matrix.arch }}
+    release-gnu:
+        name: Release GNU - ${{ matrix.arch }}
         strategy:
             matrix:
                 include:
@@ -22,36 +22,68 @@ jobs:
                     - arch: arm64
                       runner: ubuntu-24.04-arm
                       target: aarch64-unknown-linux-gnu
-                    - arch: alpine-amd64
-                      runner: ubuntu-latest
-                      target: x86_64-unknown-linux-musl
-                    - arch: alpine-arm64
-                      runner: ubuntu-24.04-arm
-                      target: aarch64-unknown-linux-musl
         runs-on: ${{ matrix.runner }}
         steps:
-            - name: Install OpenSSL development libraries
+            - name: Install dependencies
               run: |
                   sudo apt-get update
-                  sudo apt-get install -y libssl-dev musl-tools
+                  sudo apt-get install -y libssl-dev
             - name: Checkout
               uses: actions/checkout@v4
             - name: Set up Rust
               uses: dtolnay/rust-toolchain@stable
             - name: Add Rust target
               run: rustup target add ${{ matrix.target }}
-            - name: Install cross-compilation tool
-              if: contains(matrix.target, 'musl')
-              run: cargo install cross --version 0.2.5
-            - name: Build shared library (musl)
-              if: contains(matrix.target, 'musl')
-              run: cross build --release --target ${{ matrix.target }}
-            - name: Build shared library (gnu)
-              if: "!contains(matrix.target, 'musl')"
+            - name: Build shared library
               run: cargo build --release --target ${{ matrix.target }}
-            - name: Rename .so for arch
+            - name: Rename artifact
               run: mv target/${{ matrix.target }}/release/libvalkey_ldap.so target/${{ matrix.target }}/release/libvalkey_ldap-${{ matrix.arch }}.so
-            - name: Upload .so artifact
+            - name: Upload artifact
+              uses: actions/upload-artifact@v6
+              with:
+                  name: valkey-ldap-${{ matrix.arch }}.so
+                  path: target/${{ matrix.target }}/release/libvalkey_ldap-${{ matrix.arch }}.so
+
+    release-alpine:
+        name: Release Alpine - ${{ matrix.arch }}
+        strategy:
+            matrix:
+                include:
+                    - arch: alpine-amd64
+                      runner: ubuntu-latest
+                      target: x86_64-unknown-linux-musl
+                      use_cross: true
+                    - arch: alpine-arm64
+                      runner: ubuntu-24.04-arm
+                      target: aarch64-unknown-linux-musl
+                      use_cross: false
+        runs-on: ${{ matrix.runner }}
+        steps:
+            - name: Install dependencies
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y libssl-dev musl-tools
+            - name: Install ARM64 musl compiler
+              if: matrix.arch == 'alpine-arm64'
+              run: sudo apt-get install -y musl-dev gcc-aarch64-linux-gnu
+            - name: Checkout
+              uses: actions/checkout@v4
+            - name: Set up Rust
+              uses: dtolnay/rust-toolchain@stable
+            - name: Add Rust target
+              run: rustup target add ${{ matrix.target }}
+            - name: Install cross tool
+              if: matrix.use_cross
+              run: cargo install cross --version 0.2.5
+            - name: Build with cross
+              if: matrix.use_cross
+              run: cross build --release --target ${{ matrix.target }}
+            - name: Build with cargo
+              if: "!matrix.use_cross"
+              run: cargo build --release --target ${{ matrix.target }}
+            - name: Rename artifact
+              run: mv target/${{ matrix.target }}/release/libvalkey_ldap.so target/${{ matrix.target }}/release/libvalkey_ldap-${{ matrix.arch }}.so
+            - name: Upload artifact
               uses: actions/upload-artifact@v6
               with:
                   name: valkey-ldap-${{ matrix.arch }}.so
@@ -59,7 +91,7 @@ jobs:
 
     publish-release:
         name: Publish Release
-        needs: release
+        needs: [release-gnu, release-alpine]
         runs-on: ubuntu-latest
         steps:
             - name: Download all artifacts
