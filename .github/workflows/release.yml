@@ -52,20 +52,15 @@ jobs:
                     - arch: alpine-amd64
                       runner: ubuntu-latest
                       target: x86_64-unknown-linux-musl
-                      use_cross: true
                     - arch: alpine-arm64
-                      runner: ubuntu-24.04-arm
+                      runner: ubuntu-latest
                       target: aarch64-unknown-linux-musl
-                      use_cross: false
         runs-on: ${{ matrix.runner }}
         steps:
             - name: Install dependencies
               run: |
                   sudo apt-get update
-                  sudo apt-get install -y libssl-dev musl-tools
-            - name: Install ARM64 musl compiler
-              if: matrix.arch == 'alpine-arm64'
-              run: sudo apt-get install -y musl-dev gcc-aarch64-linux-gnu
+                  sudo apt-get install -y libssl-dev
             - name: Checkout
               uses: actions/checkout@v4
             - name: Set up Rust
@@ -73,14 +68,9 @@ jobs:
             - name: Add Rust target
               run: rustup target add ${{ matrix.target }}
             - name: Install cross tool
-              if: matrix.use_cross
               run: cargo install cross --version 0.2.5
             - name: Build with cross
-              if: matrix.use_cross
               run: cross build --release --target ${{ matrix.target }}
-            - name: Build with cargo
-              if: "!matrix.use_cross"
-              run: cargo build --release --target ${{ matrix.target }}
             - name: Rename artifact
               run: mv target/${{ matrix.target }}/release/libvalkey_ldap.so target/${{ matrix.target }}/release/libvalkey_ldap-${{ matrix.arch }}.so
             - name: Upload artifact
