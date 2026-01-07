@@ -23,5 +23,5 @@ COPY . .
 ENV RUSTFLAGS="-C target-feature=-crt-static"
 RUN cargo build --release
 
-# The compiled library will be in target/release/libvalkey_ldap.so
-CMD ["sh", "-c", "cp target/release/libvalkey_ldap.so /output/libvalkey_ldap.so"]
+# Copy the output to a predictable location for extraction
+RUN mkdir -p /output && cp target/release/libvalkey_ldap.so /output/libvalkey_ldap.so
