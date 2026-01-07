@@ -1,0 +1,7 @@
+target/
+alpine-build/
+.git/
+.github/
+*.md
+LICENSE
+.gitignore

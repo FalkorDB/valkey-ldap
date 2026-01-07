@@ -1,0 +1,27 @@
+FROM alpine:latest
+
+# Install build dependencies
+RUN apk add --no-cache \
+    rust \
+    cargo \
+    gcc \
+    musl-dev \
+    openssl-dev \
+    perl \
+    make \
+    clang-dev \
+    llvm-dev
+
+# Set working directory
+WORKDIR /build
+
+# Copy project files
+COPY . .
+
+# Build the project with flags to enable cdylib for musl
+# Works for both x86_64 and aarch64 architectures
+ENV RUSTFLAGS="-C target-feature=-crt-static"
+RUN cargo build --release
+
+# Copy the output to a predictable location for extraction
+RUN mkdir -p /output && cp target/release/libvalkey_ldap.so /output/libvalkey_ldap.so
