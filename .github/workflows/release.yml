@@ -71,6 +71,9 @@ jobs:
               run: cargo install cross --version 0.2.5
             - name: Build with cross
               run: cross build --release --target ${{ matrix.target }}
+              env:
+                  CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-C target-feature=-crt-static"
+                  CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-C target-feature=-crt-static"
             - name: Rename artifact
               run: mv target/${{ matrix.target }}/release/libvalkey_ldap.so target/${{ matrix.target }}/release/libvalkey_ldap-${{ matrix.arch }}.so
             - name: Upload artifact
