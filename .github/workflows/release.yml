@@ -37,7 +37,7 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v4
             - name: Set up Rust
-              uses: dtolnay/rust-toolchain@1.87.0
+              uses: dtolnay/rust-toolchain@stable
             - name: Add Rust target
               run: rustup target add ${{ matrix.target }}
             - name: Install cross-compilation tool
