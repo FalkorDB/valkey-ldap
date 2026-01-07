@@ -40,7 +40,14 @@ jobs:
               uses: dtolnay/rust-toolchain@1.87.0
             - name: Add Rust target
               run: rustup target add ${{ matrix.target }}
-            - name: Build shared library
+            - name: Install cross-compilation tool
+              if: contains(matrix.target, 'musl')
+              run: cargo install cross --version 0.2.5
+            - name: Build shared library (musl)
+              if: contains(matrix.target, 'musl')
+              run: cross build --release --target ${{ matrix.target }}
+            - name: Build shared library (gnu)
+              if: "!contains(matrix.target, 'musl')"
               run: cargo build --release --target ${{ matrix.target }}
             - name: Rename .so for arch
               run: mv target/${{ matrix.target }}/release/libvalkey_ldap.so target/${{ matrix.target }}/release/libvalkey_ldap-${{ matrix.arch }}.so
