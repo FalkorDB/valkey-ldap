@@ -293,6 +293,13 @@ valkey_module! {
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_connection_setting_change))
             ],
+            [
+                "acl_fallback_enabled",
+                &*configs::LDAP_ACL_FALLBACK_ENABLED,
+                false,
+                ConfigurationFlags::DEFAULT,
+                None
+            ],
         ],
         enum: [
             [

@@ -77,6 +77,18 @@ impl VkLdapError {
             _ => false,
         }
     }
+
+    /// Returns true if the error indicates the LDAP server is unavailable
+    /// This is used to distinguish server unavailability from authentication failures
+    pub fn is_server_unavailable(&self) -> bool {
+        matches!(
+            self,
+            VkLdapError::NoHealthyServerAvailable
+                | VkLdapError::LdapConnectionError(_)
+                | VkLdapError::NoServerConfigured
+                | VkLdapError::SchedulerNotReady
+        )
+    }
 }
 
 impl std::fmt::Display for VkLdapError {

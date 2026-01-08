@@ -150,6 +150,86 @@ CONFIG SET ldap.exempted_users_regex "^(default|exporter|replication)$"
 # Regular LDAP users (no local password)
 ACL SETUSER bob on resetpass +@hash
 ACL SETUSER alice on resetpass +@read
+```
+
+## ACL Fallback for LDAP Server Unavailability
+
+The ACL fallback feature provides high availability by allowing users to authenticate against cached credentials in the local ACL when the LDAP server is unreachable. This ensures continued service operation during LDAP outages while maintaining security.
+
+### How It Works
+
+When `ldap.acl_fallback_enabled` is set to `true`:
+
+1. **On successful LDAP authentication**: The user's password is securely saved in the Valkey ACL alongside their permissions
+2. **On LDAP server unavailability**: Users can authenticate using their cached password in the ACL
+3. **On credential rejection**: Authentication fails immediately without falling back to ACL (prevents bypassing LDAP password changes)
+
+### Configuration
+
+```bash
+# Enable ACL fallback
+CONFIG SET ldap.acl_fallback_enabled true
+
+# Disable ACL fallback (default)
+CONFIG SET ldap.acl_fallback_enabled false
+```
+
+### Important Behavior
+
+**Server Unavailability vs Credential Rejection:**
+- ✅ **Server unavailable** (connection failure, no healthy servers): Falls back to ACL if enabled
+- ❌ **Wrong credentials** (invalid password, user not found): Never falls back to ACL
+- ❌ **LDAP rejects credentials**: Never falls back to ACL
+
+This distinction is critical for security:
+- If a user changes their LDAP password, they cannot use the old cached password in ACL
+- If a user is disabled in LDAP, they cannot bypass this using the ACL
+- Only true infrastructure failures trigger the fallback mechanism
+
+### Security Considerations
+
+1. **Password Caching**: Passwords are stored in Valkey's ACL system. Ensure proper access controls and encryption for your Valkey instance.
+
+2. **Stale Credentials**: If a user changes their LDAP password while the LDAP server is reachable, the cached password is automatically updated. However, if they change it while LDAP is down, the old password remains cached until the next successful LDAP authentication.
+
+3. **User Removal**: If a user is removed from LDAP and marked as "user not found", they are deleted from the ACL even if fallback is enabled. Only server unavailability triggers fallback.
+
+4. **Exempted Users**: Exempted users (via `ldap.exempted_users_regex`) bypass LDAP entirely and always use local ACL authentication, regardless of the fallback setting.
+
+### Example Usage
+
+```bash
+# Setup: Enable ACL fallback
+CONFIG SET ldap.acl_fallback_enabled true
+
+# User authenticates successfully via LDAP
+# (password is now cached in ACL automatically)
+AUTH alice <ldap-password>
+
+# LDAP server becomes unavailable...
+# User can still authenticate using cached credentials
+AUTH alice <ldap-password>
+
+# User changes password in LDAP (after LDAP recovers)
+AUTH alice <new-ldap-password>
+# New password is now cached
+
+# User tries wrong password
+AUTH alice <wrong-password>
+# Fails immediately - no fallback to ACL for wrong credentials
+```
+
+### When to Use ACL Fallback
+
+**Enable ACL fallback when:**
+- High availability is critical and brief LDAP outages cannot interrupt service
+- You have monitoring to detect and alert on LDAP server issues
+- Your security policies allow password caching
+
+**Keep ACL fallback disabled when:**
+- Security policies require real-time LDAP validation for all authentications
+- You prefer to fail closed (deny access) during LDAP outages
+- Immediate enforcement of password changes is required
 
 # Authenticate as exempted user (uses local password)
 AUTH default supersecret
@@ -212,6 +292,7 @@ AUTH bob ldap-password
 | `ldap.groups_rules_attribute` | string | `"valkeyACL"` | LDAP attribute on group entries containing space-delimited ACL rule tokens applied to the user at login. |
 | `ldap.default_acl_rules` | string | `"on resetpass"` | Default ACL rule tokens always applied alongside LDAP-provided tokens. |
 | `ldap.exempted_users_regex` | string | `""` | Regex pattern to exempt certain users from LDAP authentication. Users matching this pattern will bypass LDAP and use local Valkey authentication. Useful for service accounts, monitoring users, and inter-node communication. Examples: `^(default|exporter|replication)$` or `^(admin\|metrics-.*)$`. |
+| `ldap.acl_fallback_enabled` | bool | `false` | Enable ACL fallback when LDAP server is unavailable. When enabled and LDAP authentication succeeds, the user's password is saved in the ACL. If the LDAP server becomes unavailable later, the user can still authenticate using the cached password in the ACL. Note: This only applies to server unavailability; credential rejections will never fall back to ACL. |
 
 ### Quick Setup: Dynamic ACL Rule Sync
 
