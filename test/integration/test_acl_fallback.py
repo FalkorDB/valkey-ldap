@@ -35,7 +35,7 @@ class AclFallbackTest(LdapTestCase):
     def tearDown(self):
         # Disable fallback
         try:
-            self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "false")
+            self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "no")
         except:
             pass
         
@@ -79,12 +79,12 @@ class AclFallbackTest(LdapTestCase):
     def test_acl_fallback_disabled_by_default(self):
         """Test that ACL fallback is disabled by default"""
         result = self.vk.execute_command("CONFIG", "GET", "ldap.acl_fallback_enabled")
-        self.assertEqual(result[1].decode("utf-8"), "false")
+        self.assertEqual(result[1].decode("utf-8"), "no")
 
     def test_acl_fallback_enabled_caches_password(self):
         """Test that enabling fallback caches passwords in ACL on successful auth"""
         # Enable ACL fallback
-        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "true")
+        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "yes")
         
         # Authenticate user via LDAP
         self.vk.execute_command("AUTH", "user1", "user1@123")
@@ -105,7 +105,7 @@ class AclFallbackTest(LdapTestCase):
     def test_fallback_works_when_ldap_unavailable(self):
         """Test that cached password works when LDAP is unavailable"""
         # Enable ACL fallback
-        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "true")
+        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "yes")
         
         # First auth: succeeds via LDAP and caches password
         self.vk.execute_command("AUTH", "user1", "user1@123")
@@ -143,7 +143,7 @@ class AclFallbackTest(LdapTestCase):
     def test_no_fallback_when_disabled(self):
         """Test that authentication fails when LDAP is down and fallback is disabled"""
         # Ensure fallback is disabled (default)
-        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "false")
+        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "no")
         
         # First authenticate to create the user
         self.vk.execute_command("AUTH", "user1", "user1@123")
@@ -175,7 +175,7 @@ class AclFallbackTest(LdapTestCase):
     def test_wrong_password_blocks_and_clears_cache(self):
         """Test that wrong password clears cache and blocks authentication"""
         # Enable ACL fallback
-        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "true")
+        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "yes")
         
         # First auth: succeeds via LDAP and caches password
         self.vk.execute_command("AUTH", "user1", "user1@123")
@@ -221,7 +221,7 @@ class AclFallbackTest(LdapTestCase):
     def test_password_updated_on_successful_reauth(self):
         """Test that cached password is updated on each successful authentication"""
         # Enable ACL fallback
-        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "true")
+        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "yes")
         
         # First auth with correct password
         self.vk.execute_command("AUTH", "user1", "user1@123")
@@ -241,7 +241,7 @@ class AclFallbackTest(LdapTestCase):
     def test_user_not_found_deletes_cached_user(self):
         """Test that user not found in LDAP results in deletion from ACL"""
         # Enable ACL fallback
-        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "true")
+        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "yes")
         
         # First auth: succeeds and caches password
         self.vk.execute_command("AUTH", "user1", "user1@123")
@@ -263,7 +263,7 @@ class AclFallbackTest(LdapTestCase):
     def test_credential_rejection_never_falls_back_to_acl(self):
         """Test that credential rejection blocks auth even with fallback enabled and cached password"""
         # Enable ACL fallback
-        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "true")
+        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "yes")
         
         # First auth: succeeds via LDAP and caches password
         self.vk.execute_command("AUTH", "user1", "user1@123")
@@ -287,7 +287,7 @@ class AclFallbackTest(LdapTestCase):
     def test_fallback_with_multiple_users(self):
         """Test that fallback works independently for multiple users"""
         # Enable ACL fallback
-        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "true")
+        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "yes")
         
         # Setup second user for bind mode
         self.vk.execute_command("ACL", "SETUSER", "user2", "ON", ">pass", "+@all", "~*")
