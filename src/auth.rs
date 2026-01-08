@@ -66,7 +66,7 @@ fn handle_user_not_found(ctx: &Context, username: &str) -> Result<c_int, ValkeyE
         Ok(_) => debug!("successfully deleted user {username} from ACL"),
         Err(e) => debug!("could not delete user {username} from ACL: {e}"),
     }
-    
+
     Err(ValkeyError::Str("User not found in LDAP"))
 }
 
@@ -76,7 +76,9 @@ fn handle_server_unavailable(ctx: &Context, username: &str) -> Result<c_int, Val
         debug!("LDAP server unavailable, falling back to ACL authentication for user {username}");
         Ok(AUTH_NOT_HANDLED)
     } else {
-        debug!("LDAP server unavailable and fallback disabled, rejecting authentication for user {username}");
+        debug!(
+            "LDAP server unavailable and fallback disabled, rejecting authentication for user {username}"
+        );
         Err(ValkeyError::Str("LDAP server unavailable"))
     }
 }
@@ -90,7 +92,7 @@ fn handle_credential_rejection(ctx: &Context, username: &str) -> Result<c_int, V
             Err(e) => debug!("could not clear password for user {username}: {e}"),
         }
     }
-    
+
     Err(ValkeyError::Str("LDAP authentication failed"))
 }
 
