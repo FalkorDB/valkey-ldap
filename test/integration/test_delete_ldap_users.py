@@ -26,8 +26,8 @@ class DeleteLdapUsersTest(TestCase):
         time.sleep(1)
 
     def tearDown(self):
-        # Clear exemption pattern
-        self.client.config_set('ldap.exempted_users_regex', '')
+        # Restore default exemption pattern (default user should always be exempted)
+        self.client.config_set('ldap.exempted_users_regex', '^default$')
         clean_acl(self.client)
 
     def test_delete_non_ldap_user_from_acl(self):
