@@ -282,8 +282,8 @@ AUTH bob ldap-password
 | ------------|------|---------|-------------|
 | `ldap.connection_pool_size` | number | `2` | The number of connections available in each LDAP server's connection pool. |
 | `ldap.failure_detector_interval` | number | `1` | The number of seconds between each iteration of the failure detector. |
-| `ldap.timeout_connection` | number | `10` | The number of seconds for to wait when connection to an LDAP server before timing out. |
-| `ldap.timeout_ldap_operation` | number | `10` | The number of seconds for to wait for an LDAP operation before timing out. |
+| `ldap.timeout_connection` | number | `2` | The number of seconds for to wait when connection to an LDAP server before timing out. |
+| `ldap.timeout_ldap_operation` | number | `2` | The number of seconds for to wait for an LDAP operation before timing out. |
 | `ldap.group_acl_user_map` | string | `""` | Comma-separated LDAP group to Valkey ACL user mapping (`group=acluser`). (Legacy approach; use dynamic ACL rule sync below for most cases.) |
 | `ldap.groups_search_base` | string | `""` | DN for group search; defaults to `ldap.search_base` when unset. |
 | `ldap.groups_filter` | string | `"objectClass=groupOfNames"` | LDAP filter used when searching for groups. |

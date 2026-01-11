@@ -196,6 +196,7 @@ class DeleteLdapUsersTest(TestCase):
                 host='localhost',
                 port=6379,
                 username='removeduser',
+                # noqa: S106
                 password='anypassword',
                 decode_responses=True
             )
