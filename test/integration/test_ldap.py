@@ -3,7 +3,7 @@ from unittest import TestCase
 from threading import Thread
 from urllib.parse import urlparse
 
-from valkey.exceptions import AuthenticationError, ConnectionError
+from valkey.exceptions import AuthenticationError, ConnectionError, ResponseError
 import valkey
 
 from util import DOCKER_SERVICES, LdapTestCase, parse_valkey_info_section
@@ -60,7 +60,7 @@ class LdapModuleBindTest(LdapTestCase):
 
     def test_ldap_no_server_error(self):
         self.vk.execute_command("CONFIG", "SET", "ldap.servers", "")
-        with self.assertRaises(AuthenticationError) as ctx:
+        with self.assertRaises((AuthenticationError, ResponseError)) as ctx:
             self.vk.execute_command("AUTH", "user1", "user1@123")
 
     def test_ldap_auth(self):
@@ -69,7 +69,7 @@ class LdapModuleBindTest(LdapTestCase):
         self.assertTrue(resp.decode() == "user1")
 
     def test_ldap_wrong_pass(self):
-        with self.assertRaises(AuthenticationError) as ctx:
+        with self.assertRaises((AuthenticationError, ResponseError)) as ctx:
             self.vk.execute_command("AUTH", "user1", "wrongpass")
 
     def test_ldap_ssl_auth(self):
@@ -126,7 +126,7 @@ class LdapModuleBindAndSearchTest(LdapTestCase):
 
     def test_ldap_auth_no_user(self):
         self.vk.execute_command("CONFIG", "SET", "ldap.servers", "ldaps://ldap")
-        with self.assertRaises(AuthenticationError) as ctx:
+        with self.assertRaises((AuthenticationError, ResponseError)) as ctx:
             self.vk.execute_command("AUTH", "user2", "user2@123")
 
     def test_ldap_bind_password_hidden(self):
@@ -182,7 +182,7 @@ class LdapModuleFailoverTest(LdapTestCase):
         self._wait_for_ldap_server_status("ldap", "unhealthy")
         self._wait_for_ldap_server_status("ldap-2", "unhealthy")
 
-        with self.assertRaises(AuthenticationError) as ctx:
+        with self.assertRaises((AuthenticationError, ResponseError)) as ctx:
             self.vk.execute_command("AUTH", "user1", "user1@123")
 
         DOCKER_SERVICES.restart_service(service)

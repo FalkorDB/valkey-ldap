@@ -85,11 +85,22 @@ fn handle_server_unavailable(ctx: &Context, username: &str) -> Result<c_int, Val
 
 /// Handle the case where LDAP rejects the credentials
 fn handle_credential_rejection(ctx: &Context, username: &str) -> Result<c_int, ValkeyError> {
-    if configs::is_acl_fallback_enabled(ctx) {
-        debug!("LDAP rejected credentials for user {username}, clearing cached password from ACL");
-        match ctx.call("ACL", &["SETUSER", username, "resetpass"]) {
-            Ok(_) => debug!("cleared cached password for user {username}"),
-            Err(e) => debug!("could not clear password for user {username}: {e}"),
+    // When credentials are rejected, we need to decide whether to delete the user or just clear the password.
+    // In bind mode: LDAP error 49 (invalidCredentials) doesn't distinguish between:
+    //   - User doesn't exist in LDAP (should delete from ACL)
+    //   - User exists but wrong password (could keep in ACL or delete safely - they can re-auth)
+    // In search+bind mode: If we reach this point, user was found in search, so it's just wrong password
+    //
+    // Strategy: Delete the user from ACL to ensure consistency and prevent stale users.
+    // Users can always re-authenticate if they exist in LDAP with correct credentials.
+    error!("LDAP rejected credentials for user {username}, attempting to delete from ACL");
+    match ctx.call("ACL", &["DELUSER", username]) {
+        Ok(result) => {
+            debug!("ACL DELUSER returned: {result:?}");
+            debug!("successfully deleted user {username} from ACL");
+        }
+        Err(e) => {
+            error!("ACL DELUSER failed for user {username}: {e}");
         }
     }
 

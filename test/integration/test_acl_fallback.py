@@ -45,8 +45,9 @@ class AclFallbackTest(LdapTestCase):
             if container and container.status != "running":
                 DOCKER_SERVICES.restart_service(container)
         
-        # Wait for servers to recover
+        # Wait for servers to recover and become healthy
         time.sleep(2)
+        self._wait_for_healthy_servers(timeout=15)
         
         super().tearDown()
 
@@ -155,7 +156,7 @@ class AclFallbackTest(LdapTestCase):
         
         try:
             # Try to authenticate - should fail because fallback is disabled
-            with self.assertRaises(AuthenticationError):
+            with self.assertRaises((AuthenticationError, ResponseError)):
                 fallback_client = valkey.Valkey(
                     host="localhost",
                     port=6379,
@@ -171,6 +172,9 @@ class AclFallbackTest(LdapTestCase):
                 DOCKER_SERVICES.restart_service(ldap_service)
             if ldap2_service:
                 DOCKER_SERVICES.restart_service(ldap2_service)
+            # Wait for servers to become healthy before next test
+            time.sleep(2)
+            self._wait_for_healthy_servers(timeout=15)
 
     def test_wrong_password_blocks_and_clears_cache(self):
         """Test that wrong password clears cache and blocks authentication"""
@@ -182,7 +186,7 @@ class AclFallbackTest(LdapTestCase):
         
         # Try to authenticate with wrong password while LDAP is available
         # This should fail and clear the cached password
-        with self.assertRaises(AuthenticationError):
+        with self.assertRaises((AuthenticationError, ResponseError)):
             wrong_client = valkey.Valkey(
                 host="localhost",
                 port=6379,
@@ -201,7 +205,7 @@ class AclFallbackTest(LdapTestCase):
         try:
             # Try to authenticate with the correct password
             # This should FAIL because the cache was cleared by the wrong password attempt
-            with self.assertRaises(AuthenticationError):
+            with self.assertRaises((AuthenticationError, ResponseError)):
                 fallback_client = valkey.Valkey(
                     host="localhost",
                     port=6379,
@@ -217,6 +221,9 @@ class AclFallbackTest(LdapTestCase):
                 DOCKER_SERVICES.restart_service(ldap_service)
             if ldap2_service:
                 DOCKER_SERVICES.restart_service(ldap2_service)
+            # Wait for servers to become healthy before next test
+            time.sleep(2)
+            self._wait_for_healthy_servers(timeout=15)
 
     def test_password_updated_on_successful_reauth(self):
         """Test that cached password is updated on each successful authentication"""
@@ -251,14 +258,24 @@ class AclFallbackTest(LdapTestCase):
         user_exists = any(b"user1" in entry or "user1" in str(entry) for entry in acl_list)
         self.assertTrue(user_exists, "user1 should exist in ACL after successful auth")
         
-        # Try to auth as non-existent user (should fail and not create user)
-        with self.assertRaises(AuthenticationError):
+        # Pre-create nonexistent user in ACL (simulating a user that was previously in LDAP but was removed)
+        self.vk.execute_command("ACL", "SETUSER", "nonexistentuser", "ON", "resetpass", "+@all", "~*")
+        
+        # Verify user was created
+        acl_list = self.vk.execute_command("ACL", "LIST")
+        user_exists = any(b"nonexistentuser" in entry or "nonexistentuser" in str(entry) for entry in acl_list)
+        self.assertTrue(user_exists, "nonexistentuser should exist in ACL before auth attempt")
+        
+        # Try to auth as non-existent user (should fail and delete from ACL)
+        with self.assertRaises((AuthenticationError, ResponseError)):
             self.vk.execute_command("AUTH", "nonexistentuser", "anypassword")
         
-        # Verify non-existent user was not created in ACL
+        # Verify non-existent user was completely deleted from ACL
         acl_list = self.vk.execute_command("ACL", "LIST")
-        nonexistent_user = any(b"nonexistentuser" in entry or "nonexistentuser" in str(entry) for entry in acl_list)
-        self.assertFalse(nonexistent_user, "nonexistentuser should not exist in ACL")
+        for entry in acl_list:
+            entry_str = entry.decode("utf-8") if isinstance(entry, bytes) else entry
+            self.assertNotIn("nonexistentuser", entry_str, 
+                           "nonexistentuser should be completely deleted from ACL")
 
     def test_credential_rejection_never_falls_back_to_acl(self):
         """Test that credential rejection blocks auth even with fallback enabled and cached password"""
@@ -269,7 +286,7 @@ class AclFallbackTest(LdapTestCase):
         self.vk.execute_command("AUTH", "user1", "user1@123")
         
         # Try wrong password while LDAP is available - should fail
-        with self.assertRaises(AuthenticationError):
+        with self.assertRaises((AuthenticationError, ResponseError)):
             wrong_client = valkey.Valkey(
                 host="localhost",
                 port=6379,

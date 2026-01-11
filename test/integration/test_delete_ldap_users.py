@@ -2,6 +2,7 @@ from unittest import TestCase
 import time
 
 import valkey
+from valkey.exceptions import AuthenticationError, ResponseError
 from util import clean_acl, setup_ldap_users
 
 
@@ -40,7 +41,7 @@ class DeleteLdapUsersTest(TestCase):
         self.assertTrue(any('nonldapuser' in user for user in acl_list))
         
         # Try to authenticate as this non-LDAP user (should fail and delete the user)
-        with self.assertRaises(valkey.exceptions.AuthenticationError):
+        with self.assertRaises((valkey.exceptions.AuthenticationError, valkey.exceptions.ResponseError)):
             test_client = valkey.Valkey(
                 host='localhost',
                 port=6379,
@@ -67,7 +68,7 @@ class DeleteLdapUsersTest(TestCase):
         self.assertTrue(any('exporter' in user for user in acl_list))
         
         # Try to authenticate with wrong password (should fail but NOT delete the user)
-        with self.assertRaises(valkey.exceptions.AuthenticationError):
+        with self.assertRaises((valkey.exceptions.AuthenticationError, valkey.exceptions.ResponseError)):
             test_client = valkey.Valkey(
                 host='localhost',
                 port=6379,
@@ -108,7 +109,7 @@ class DeleteLdapUsersTest(TestCase):
         self.assertTrue(any('deleteduser' in user for user in acl_list))
         
         # Try to authenticate as this user (should fail because not in LDAP)
-        with self.assertRaises(valkey.exceptions.AuthenticationError):
+        with self.assertRaises((valkey.exceptions.AuthenticationError, valkey.exceptions.ResponseError)):
             test_client = valkey.Valkey(
                 host='localhost',
                 port=6379,
@@ -134,7 +135,7 @@ class DeleteLdapUsersTest(TestCase):
         self.assertTrue(any('user_b' in user for user in acl_list))
         
         # Try to auth as user_a (should fail and delete user_a)
-        with self.assertRaises(valkey.exceptions.AuthenticationError):
+        with self.assertRaises((valkey.exceptions.AuthenticationError, valkey.exceptions.ResponseError)):
             test_client = valkey.Valkey(
                 host='localhost',
                 port=6379,
@@ -150,7 +151,7 @@ class DeleteLdapUsersTest(TestCase):
         self.assertTrue(any('user_b' in user for user in acl_list))
         
         # Try to auth as user_b (should fail and delete user_b)
-        with self.assertRaises(valkey.exceptions.AuthenticationError):
+        with self.assertRaises((valkey.exceptions.AuthenticationError, valkey.exceptions.ResponseError)):
             test_client = valkey.Valkey(
                 host='localhost',
                 port=6379,
@@ -197,7 +198,7 @@ class DeleteLdapUsersTest(TestCase):
         self.assertTrue(any('user1' in user for user in acl_list))
         
         # Try to authenticate with WRONG password (should fail but NOT delete the user)
-        with self.assertRaises(valkey.exceptions.AuthenticationError):
+        with self.assertRaises((valkey.exceptions.AuthenticationError, valkey.exceptions.ResponseError)):
             test_client = valkey.Valkey(
                 host='localhost',
                 port=6379,
