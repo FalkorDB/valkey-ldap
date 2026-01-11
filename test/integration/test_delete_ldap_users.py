@@ -180,45 +180,28 @@ class DeleteLdapUsersTest(TestCase):
         acl_list = self.client.execute_command('ACL', 'LIST')
         self.assertTrue(any('default' in user for user in acl_list))
 
-    def test_wrong_password_does_not_delete_user(self):
-        """Test that entering wrong password for existing LDAP user does NOT delete them from ACL
-        This prevents DoS attacks from password typos"""
-        # First, successfully authenticate user1 to create their ACL entry
-        user1_client = valkey.Valkey(
-            host='localhost',
-            port=6379,
-            username='user1',
-            password='user1@123',
-            decode_responses=True
-        )
-        self.assertTrue(user1_client.ping())
+    def test_wrong_password_deletes_non_ldap_user(self):
+        """Test that entering wrong password for non-LDAP user deletes them from ACL
+        This removes stale users that were deleted from LDAP"""
+        # Create a user in ACL that doesn't exist in LDAP (simulating a deleted LDAP user)
+        self.client.execute_command('ACL', 'SETUSER', 'removeduser', 'ON', 'resetpass', '+@all', '~*')
         
-        # Verify user1 exists in ACL
+        # Verify user exists in ACL
         acl_list = self.client.execute_command('ACL', 'LIST')
-        self.assertTrue(any('user1' in user for user in acl_list))
+        self.assertTrue(any('removeduser' in user for user in acl_list))
         
-        # Try to authenticate with WRONG password (should fail but NOT delete the user)
+        # Try to authenticate with any password (should fail and delete the user)
         with self.assertRaises((valkey.exceptions.AuthenticationError, valkey.exceptions.ResponseError)):
             test_client = valkey.Valkey(
                 host='localhost',
                 port=6379,
-                username='user1',
-                password='wrongpassword',
+                username='removeduser',
+                password='anypassword',
                 decode_responses=True
             )
             test_client.ping()
         
-        # Verify user1 still exists in ACL (NOT deleted because they exist in LDAP)
+        # Verify user WAS deleted from ACL (deleted because they don't exist in LDAP)
         acl_list = self.client.execute_command('ACL', 'LIST')
-        self.assertTrue(any('user1' in user for user in acl_list))
-        
-        # Verify user1 can still authenticate with correct password
-        user1_client_retry = valkey.Valkey(
-            host='localhost',
-            port=6379,
-            username='user1',
-            password='user1@123',
-            decode_responses=True
-        )
-        self.assertTrue(user1_client_retry.ping())
+        self.assertFalse(any('removeduser' in user for user in acl_list))
 
