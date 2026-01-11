@@ -106,8 +106,8 @@ lazy_static! {
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
     pub static ref LDAP_CONNECTION_POOL_SIZE: ValkeyGILGuard<i64> = ValkeyGILGuard::new(2);
     pub static ref LDAP_FAILURE_DETECTOR_INTERVAL: ValkeyGILGuard<i64> = ValkeyGILGuard::new(1);
-    pub static ref LDAP_TIMEOUT_CONNECTION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(10);
-    pub static ref LDAP_TIMEOUT_LDAP_OPERATION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(10);
+    pub static ref LDAP_TIMEOUT_CONNECTION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(2);
+    pub static ref LDAP_TIMEOUT_LDAP_OPERATION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(2);
     // Group/authorization configs
     pub static ref LDAP_GROUPS_SEARCH_BASE: ValkeyGILGuard<ValkeyString> =
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
@@ -128,6 +128,7 @@ lazy_static! {
         ValkeyGILGuard::new(ValkeyString::create(None, "on resetpass"));
     pub static ref LDAP_EXEMPTED_USERS_REGEX: ValkeyGILGuard<ValkeyString> =
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
+    pub static ref LDAP_ACL_FALLBACK_ENABLED: ValkeyGILGuard<bool> = ValkeyGILGuard::default();
 }
 
 lazy_static! {
@@ -469,6 +470,11 @@ pub fn is_user_exempted_from_ldap(username: &str) -> bool {
     } else {
         false
     }
+}
+
+pub fn is_acl_fallback_enabled<T: ValkeyLockIndicator>(ctx: &T) -> bool {
+    let fallback_enabled = LDAP_ACL_FALLBACK_ENABLED.lock(ctx);
+    *fallback_enabled
 }
 
 pub fn exempted_users_regex_set_callback(
