@@ -63,8 +63,6 @@ fn add_ldap_status_section(ctx: &InfoContext, _for_crash_report: bool) -> Valkey
 #[cfg(feature = "embed")]
 #[unsafe(no_mangle)]
 #[allow(non_snake_case)]
-pub extern "C" fn LDAP_AddInfo(
-    for_crash_report: std::os::raw::c_int,
-) {
+pub extern "C" fn LDAP_AddInfo(for_crash_report: std::os::raw::c_int) {
     valkey_module::basic_info_command_handler(&InfoContext::new(ctx), for_crash_report != 0);
 }
