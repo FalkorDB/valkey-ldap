@@ -115,11 +115,12 @@ impl VkLdapError {
     }
 }
 
-/// Returns true if the LDAP error reports a timeout or a failure on the
-/// server's side instead of a verdict on the request.
+/// Returns true if the LDAP result reports a failure on the server's side
+/// instead of a verdict on the request. Client-side timeouts don't get here:
+/// `handle_ldap_error!` turns them into `LdapConnectionError`, which fails
+/// over to another server.
 fn is_server_side_failure(ldap_err: &LdapError) -> bool {
     match ldap_err {
-        LdapError::Timeout { .. } => true,
         // RFC 4511 result codes:
         // - 1 (operationsError): the server failed to process the operation
         // - 3 (timeLimitExceeded): the server-side time limit expired
