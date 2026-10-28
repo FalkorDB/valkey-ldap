@@ -146,3 +146,17 @@ class AuthRateLimitTest(LdapTestCase):
         with self.assertRaises((AuthenticationError, ResponseError)) as ctx:
             self.client.execute_command("AUTH", "fallbackuser", "secret")
         self.assertIn(RATE_LIMIT_ERROR, str(ctx.exception))
+
+    def test_successful_acl_fallback_logins_are_not_counted(self):
+        # While LDAP is unreachable, clients that keep reconnecting with the
+        # right password must not be blocked (#38).
+        self.vk.execute_command("ACL", "SETUSER", "fallbackuser", "on", ">secret", "+@all", "~*")
+        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "yes")
+        self.vk.execute_command("CONFIG", "SET", "ldap.servers", "ldap://127.0.0.1:1")
+        self.vk.execute_command("CONFIG", "SET", "ldap.auth_rate_limit_max_failures", "3")
+
+        for _ in range(10):
+            self.client.execute_command("AUTH", "fallbackuser", "secret")
+            self.assertEqual(
+                self.client.execute_command("ACL", "WHOAMI").decode(), "fallbackuser"
+            )
