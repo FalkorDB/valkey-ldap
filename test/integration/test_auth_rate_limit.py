@@ -160,3 +160,19 @@ class AuthRateLimitTest(LdapTestCase):
             self.assertEqual(
                 self.client.execute_command("ACL", "WHOAMI").decode(), "fallbackuser"
             )
+
+    def test_acl_fallback_checks_the_exact_username(self):
+        # A username that isn't valid UTF-8 must be checked against its own ACL
+        # password, not that of the user its lossy UTF-8 form names.
+        raw_name = b"fb\xffuser"
+        lossy_name = raw_name.decode("utf-8", errors="replace").encode()
+        self.vk.execute_command("ACL", "SETUSER", raw_name, "on", ">other", "+@all", "~*")
+        self.vk.execute_command("ACL", "SETUSER", lossy_name, "on", ">secret", "+@all", "~*")
+        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "yes")
+        self.vk.execute_command("CONFIG", "SET", "ldap.servers", "ldap://127.0.0.1:1")
+        self.vk.execute_command("CONFIG", "SET", "ldap.auth_rate_limit_max_failures", "10")
+        try:
+            with self.assertRaises((AuthenticationError, ResponseError)):
+                self.client.execute_command("AUTH", raw_name, "secret")
+        finally:
+            self.vk.execute_command("ACL", "DELUSER", raw_name, lossy_name)

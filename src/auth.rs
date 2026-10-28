@@ -252,7 +252,9 @@ fn fall_back_to_acl(
         return AUTH_NOT_HANDLED;
     };
     let uname = username.to_string();
-    let user = match ctx.call("ACL", &["GETUSER", uname.as_str()]) {
+    // Look the user up by its exact bytes: the lossy `uname` (for logs) could
+    // name a different user than the one authenticated below.
+    let user = match ctx.call("ACL", &[b"GETUSER".as_slice(), username.as_slice()]) {
         Ok(reply) => parse_acl_getuser(&reply),
         Err(e) => {
             debug!("could not read ACL user {uname} for the LDAP fallback: {e}");
