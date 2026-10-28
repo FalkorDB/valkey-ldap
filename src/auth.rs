@@ -251,20 +251,19 @@ fn fall_back_to_acl(
     let Some(attempt) = attempt else {
         return AUTH_NOT_HANDLED;
     };
-    let uname = username.to_string();
-    // Look the user up by its exact bytes: the lossy `uname` (for logs) could
-    // name a different user than the one authenticated below.
+    // Look the user up by its exact bytes: a lossy UTF-8 form could name a
+    // different user than the one authenticated below.
     let user = match ctx.call("ACL", &[b"GETUSER".as_slice(), username.as_slice()]) {
         Ok(reply) => parse_acl_getuser(&reply),
         Err(e) => {
-            debug!("could not read ACL user {uname} for the LDAP fallback: {e}");
+            debug!("could not read the ACL user for the LDAP fallback: {e}");
             None
         }
     };
     if user.is_some_and(|u| acl_password_matches(&u, password.as_slice()))
         && ctx.authenticate_client_with_acl_user(username) == Status::Ok
     {
-        debug!("authenticated user {uname} with its ACL password while LDAP is unavailable");
+        debug!("authenticated a client with its ACL password while LDAP is unavailable");
         rate_limit::refund_attempt(attempt);
         return AUTH_HANDLED;
     }
