@@ -1,11 +1,8 @@
 use std::os::raw::c_int;
 
 use log::{debug, error};
-use sha2::{Digest, Sha256};
 use valkey_module::BlockedClient;
-use valkey_module::{
-    AUTH_HANDLED, AUTH_NOT_HANDLED, Context, Status, ValkeyError, ValkeyString, ValkeyValue,
-};
+use valkey_module::{AUTH_HANDLED, AUTH_NOT_HANDLED, Context, Status, ValkeyError, ValkeyString};
 
 use crate::configs;
 use crate::rate_limit::{self, Admission};
@@ -114,14 +111,12 @@ fn handle_user_not_found(ctx: &Context, username: &str) -> Result<c_int, ValkeyE
 /// Handle the case where the LDAP server is unavailable
 fn handle_server_unavailable(
     ctx: &Context,
-    username: &ValkeyString,
-    password: &ValkeyString,
-    attempt: Option<&rate_limit::Attempt>,
+    username: &str,
     err: &VkLdapError,
 ) -> Result<c_int, ValkeyError> {
     if configs::is_acl_fallback_enabled(ctx) {
         debug!("LDAP server unavailable, falling back to ACL authentication for user {username}");
-        Ok(fall_back_to_acl(ctx, username, password, attempt))
+        Ok(AUTH_NOT_HANDLED)
     } else if configs::get_return_auth_errors(ctx) {
         debug!(
             "LDAP server unavailable and return_auth_errors enabled, returning LDAP error for user {username}"
@@ -167,109 +162,6 @@ fn handle_credential_rejection(
     }
 }
 
-/// How `ACL GETUSER` says a user can authenticate with a password.
-#[derive(Debug, Default)]
-struct AclUserAuth {
-    enabled: bool,
-    nopass: bool,
-    password_hashes: Vec<String>,
-}
-
-fn value_str(value: &ValkeyValue) -> Option<String> {
-    match value {
-        ValkeyValue::SimpleString(s) | ValkeyValue::BulkString(s) => Some(s.clone()),
-        ValkeyValue::SimpleStringStatic(s) => Some(s.to_string()),
-        ValkeyValue::BulkValkeyString(s) => Some(s.to_string_lossy()),
-        ValkeyValue::StringBuffer(b) => Some(String::from_utf8_lossy(b).into_owned()),
-        _ => None,
-    }
-}
-
-fn value_strs(value: &ValkeyValue) -> Vec<String> {
-    match value {
-        ValkeyValue::Array(items) => items.iter().filter_map(value_str).collect(),
-        _ => Vec::new(),
-    }
-}
-
-/// Reads the flags and password hashes from an `ACL GETUSER` reply. Returns
-/// None when the user doesn't exist.
-fn parse_acl_getuser(reply: &ValkeyValue) -> Option<AclUserAuth> {
-    let ValkeyValue::Array(fields) = reply else {
-        return None;
-    };
-    let mut user = AclUserAuth::default();
-    for pair in fields.chunks(2) {
-        let [key, value] = pair else { break };
-        match value_str(key).as_deref() {
-            Some("flags") => {
-                let flags = value_strs(value);
-                user.enabled = flags.iter().any(|f| f == "on");
-                user.nopass = flags.iter().any(|f| f == "nopass");
-            }
-            Some("passwords") => user.password_hashes = value_strs(value),
-            _ => {}
-        }
-    }
-    Some(user)
-}
-
-/// Whether Valkey's own password check would accept `password` for the user.
-/// Valkey stores passwords as lowercase hex SHA-256 hashes.
-fn acl_password_matches(user: &AclUserAuth, password: &[u8]) -> bool {
-    if !user.enabled {
-        return false;
-    }
-    if user.nopass {
-        return true;
-    }
-    let hash: String = Sha256::digest(password)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
-    user.password_hashes.iter().fold(false, |found, h| {
-        found | constant_time_eq(h.as_bytes(), hash.as_bytes())
-    })
-}
-
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
-}
-
-/// Falls back to the user's ACL password when LDAP can't judge the
-/// credentials. While the rate limiter counts the attempt, the module checks
-/// the password itself, so a correct one is authenticated here and refunded
-/// instead of counting as a failure (#38). Otherwise, including on a wrong
-/// password, Valkey's own password check runs next and the attempt stays
-/// counted.
-fn fall_back_to_acl(
-    ctx: &Context,
-    username: &ValkeyString,
-    password: &ValkeyString,
-    attempt: Option<&rate_limit::Attempt>,
-) -> c_int {
-    let Some(attempt) = attempt else {
-        return AUTH_NOT_HANDLED;
-    };
-    // Look the user up by its exact bytes: a lossy UTF-8 form could name a
-    // different user than the one authenticated below.
-    let user = match ctx.call("ACL", &[b"GETUSER".as_slice(), username.as_slice()]) {
-        Ok(reply) => parse_acl_getuser(&reply),
-        Err(e) => {
-            debug!("could not read the ACL user for the LDAP fallback: {e}");
-            None
-        }
-    };
-    if user.is_some_and(|u| acl_password_matches(&u, password.as_slice()))
-        && ctx.authenticate_client_with_acl_user(username) == Status::Ok
-    {
-        debug!("authenticated a client with its ACL password while LDAP is unavailable");
-        rate_limit::refund_attempt(attempt);
-        return AUTH_HANDLED;
-    }
-    AUTH_NOT_HANDLED
-}
-
 /// Private data handed from the LDAP worker to the auth reply callback: the
 /// attempt admitted by the rate limiter (if any) and the LDAP result.
 type AuthReplyData = (
@@ -307,12 +199,18 @@ fn falls_through_to_acl(ctx: &Context, err: &VkLdapError) -> bool {
 }
 
 /// Whether an attempt admitted by the rate limiter can be refunded. Attempts
-/// stay counted unless LDAP accepted the credentials, or the error rules out
-/// a wrong password and the client isn't passed on to Valkey's own password
-/// check, whose outcome the module can't see.
+/// stay counted unless LDAP accepted the credentials, LDAP was unavailable, or
+/// the error rules out a wrong password and the client isn't passed on to
+/// Valkey's own password check, whose outcome the module can't see.
+///
+/// Attempts made while LDAP is unavailable aren't counted even when the ACL
+/// fallback then checks the password, so clients reconnecting during an
+/// outage aren't blocked (#38). Password guesses against the fallback are
+/// therefore not limited while LDAP is down.
 fn should_refund(ctx: &Context, result: &Result<Vec<String>, VkLdapError>) -> bool {
     match result {
         Ok(_) => true,
+        Err(err) if err.is_server_unavailable() => true,
         Err(err) => err.rules_out_wrong_password() && !falls_through_to_acl(ctx, err),
     }
 }
@@ -328,7 +226,7 @@ fn auth_reply_callback(
             // LDAP authentication succeeded
             apply_ldap_user_acl(ctx, &username, &password, ldap_tokens)
         }
-        Some((attempt, Err(err))) => {
+        Some((_, Err(err))) => {
             // LDAP authentication failed
             let uname = username.to_string();
             debug!("failed to authenticate LDAP user {uname}");
@@ -337,7 +235,7 @@ fn auth_reply_callback(
             if err.is_user_not_found() {
                 handle_user_not_found(ctx, &uname)
             } else if err.is_server_unavailable() {
-                handle_server_unavailable(ctx, &username, &password, attempt.as_ref(), err)
+                handle_server_unavailable(ctx, &uname, err)
             } else {
                 handle_credential_rejection(ctx, &uname, err)
             }
@@ -428,15 +326,19 @@ pub fn ldap_auth_blocking_callback(
         Ok(_) => Ok(AUTH_HANDLED),
         Err(err) => {
             error!("failed to submit ldap bind request: {err}");
-            if configs::get_return_auth_errors(ctx) {
-                // The credentials never reached LDAP and the client gets an
-                // error, so the attempt doesn't count
+            let return_errors = configs::get_return_auth_errors(ctx);
+            // The credentials never reached LDAP. The attempt doesn't count if
+            // the client gets an error, or if LDAP is unavailable (see
+            // `should_refund`); otherwise Valkey's own password check runs
+            // next and it stays counted.
+            if return_errors || err.is_server_unavailable() {
                 if let Some(attempt) = &submitted_attempt {
                     rate_limit::refund_attempt(attempt);
                 }
+            }
+            if return_errors {
                 Err(ValkeyError::String(err.to_string()))
             } else {
-                // Valkey's own password check runs next; keep it counted
                 Ok(AUTH_NOT_HANDLED)
             }
         }
@@ -471,59 +373,5 @@ mod tests {
     #[test]
     fn test_validate_credentials_rejects_oversized_password() {
         assert!(validate_credentials(5, MAX_PASSWORD_LEN + 1).is_err());
-    }
-
-    // SHA-256 of "secret", as ACL GETUSER reports a ">secret" password
-    const SECRET_HASH: &str = "2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b";
-
-    fn bulk(s: &str) -> ValkeyValue {
-        ValkeyValue::BulkString(s.to_string())
-    }
-
-    fn getuser_reply(flags: &[&str], passwords: &[&str]) -> ValkeyValue {
-        ValkeyValue::Array(vec![
-            bulk("flags"),
-            ValkeyValue::Array(flags.iter().map(|f| bulk(f)).collect()),
-            bulk("passwords"),
-            ValkeyValue::Array(passwords.iter().map(|p| bulk(p)).collect()),
-            bulk("commands"),
-            bulk("+@all"),
-        ])
-    }
-
-    #[test]
-    fn test_parse_acl_getuser() {
-        let user = parse_acl_getuser(&getuser_reply(&["on"], &[SECRET_HASH])).unwrap();
-        assert!(user.enabled);
-        assert!(!user.nopass);
-        assert_eq!(user.password_hashes, vec![SECRET_HASH.to_string()]);
-
-        let user = parse_acl_getuser(&getuser_reply(&["off", "nopass"], &[])).unwrap();
-        assert!(!user.enabled);
-        assert!(user.nopass);
-    }
-
-    #[test]
-    fn test_parse_acl_getuser_unknown_user() {
-        assert!(parse_acl_getuser(&ValkeyValue::Null).is_none());
-    }
-
-    #[test]
-    fn test_acl_password_matches() {
-        let user = parse_acl_getuser(&getuser_reply(&["on"], &["00", SECRET_HASH])).unwrap();
-        assert!(acl_password_matches(&user, b"secret"));
-        assert!(!acl_password_matches(&user, b"wrong"));
-    }
-
-    #[test]
-    fn test_acl_password_matches_nopass_user() {
-        let user = parse_acl_getuser(&getuser_reply(&["on", "nopass"], &[])).unwrap();
-        assert!(acl_password_matches(&user, b"anything"));
-    }
-
-    #[test]
-    fn test_acl_password_matches_disabled_user() {
-        let user = parse_acl_getuser(&getuser_reply(&["off"], &[SECRET_HASH])).unwrap();
-        assert!(!acl_password_matches(&user, b"secret"));
     }
 }
