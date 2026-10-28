@@ -172,7 +172,12 @@ class AuthRateLimitTest(LdapTestCase):
         self.vk.execute_command("CONFIG", "SET", "ldap.servers", "ldap://127.0.0.1:1")
         self.vk.execute_command("CONFIG", "SET", "ldap.auth_rate_limit_max_failures", "10")
         try:
-            with self.assertRaises((AuthenticationError, ResponseError)):
+            with self.assertRaises((AuthenticationError, ResponseError)) as ctx:
                 self.client.execute_command("AUTH", raw_name, "secret")
+            self.assertNotIn(RATE_LIMIT_ERROR, str(ctx.exception))
+
+            # The user's own password still works through the fallback
+            self.client.execute_command("AUTH", raw_name, "other")
+            self.assertEqual(self.client.execute_command("ACL", "WHOAMI"), raw_name)
         finally:
             self.vk.execute_command("ACL", "DELUSER", raw_name, lossy_name)
