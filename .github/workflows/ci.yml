@@ -27,6 +27,8 @@ jobs:
 
   tests:
     runs-on: ubuntu-latest
+    # A crashed Valkey can leave a test waiting forever; fail instead
+    timeout-minutes: 30
     strategy:
       matrix:
         valkey_version: ["7.2", "8.0", "8.1"]
@@ -87,6 +89,15 @@ jobs:
       - name: Build Rust module
         if: steps.filter.outputs.code_changed == 'true'
         run: cargo build
+
+      - name: Limit address-space randomization for the ASAN-built Valkey
+        if: steps.filter.outputs.code_changed == 'true'
+        # ubuntu-latest (26.04) sets vm.mmap_rnd_bits to 32, with which
+        # AddressSanitizer crashes at random in an endless DEADLYSIGNAL loop.
+        # The Valkey container shares the runner's kernel.
+        run: |
+          sysctl vm.mmap_rnd_bits
+          sudo sysctl -w vm.mmap_rnd_bits=28
 
       - name: Start Valkey and LDAP services
         if: steps.filter.outputs.code_changed == 'true'
