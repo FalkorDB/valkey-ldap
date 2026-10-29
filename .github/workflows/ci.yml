@@ -96,7 +96,7 @@ jobs:
         # AddressSanitizer crashes at random in an endless DEADLYSIGNAL loop.
         # The Valkey container shares the runner's kernel.
         run: |
-          sysctl vm.mmap_rnd_bits
+          sudo sysctl vm.mmap_rnd_bits
           sudo sysctl -w vm.mmap_rnd_bits=28
 
       - name: Start Valkey and LDAP services
