@@ -123,26 +123,45 @@ class AuthRateLimitTest(LdapTestCase):
         # The exempted default user keeps authenticating through the local ACL
         self.client.execute_command("AUTH", "default", "anything")
 
-    def test_acl_fallback_attempts_are_counted(self):
-        # With LDAP unreachable and ACL fallback enabled, attempts fall through
-        # to Valkey's own password check, so they must still be counted.
+    def _ldap_unavailable_with_acl_fallback(self):
         self.vk.execute_command("ACL", "SETUSER", "fallbackuser", "on", ">secret", "+@all", "~*")
         self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "yes")
         self.vk.execute_command("CONFIG", "SET", "ldap.servers", "ldap://127.0.0.1:1")
 
-        # Make sure attempts really fall back to the ACL password check
+    def test_acl_fallback_logins_while_ldap_unavailable_are_not_counted(self):
+        # Clients that keep reconnecting with the right password while LDAP is
+        # unreachable must not be blocked (#38).
+        self._ldap_unavailable_with_acl_fallback()
+        self.vk.execute_command("CONFIG", "SET", "ldap.auth_rate_limit_max_failures", "3")
+
+        for _ in range(10):
+            self.client.execute_command("AUTH", "fallbackuser", "secret")
+            self.assertEqual(
+                self.client.execute_command("ACL", "WHOAMI").decode(), "fallbackuser"
+            )
+
+    def test_failures_while_ldap_unavailable_are_not_counted(self):
+        # The limiter doesn't count attempts LDAP couldn't judge, including
+        # wrong passwords rejected by the ACL fallback.
+        self._ldap_unavailable_with_acl_fallback()
+        self.vk.execute_command("CONFIG", "SET", "ldap.auth_rate_limit_max_failures", "3")
+
+        for _ in range(10):
+            with self.assertRaises((AuthenticationError, ResponseError)) as ctx:
+                self.client.execute_command("AUTH", "fallbackuser", "wrong")
+            self.assertNotIn(RATE_LIMIT_ERROR, str(ctx.exception))
+
         self.client.execute_command("AUTH", "fallbackuser", "secret")
         self.assertEqual(
             self.client.execute_command("ACL", "WHOAMI").decode(), "fallbackuser"
         )
 
+    def test_block_persists_while_ldap_unavailable(self):
+        # A client blocked before LDAP became unreachable stays blocked
         self.vk.execute_command("CONFIG", "SET", "ldap.auth_rate_limit_max_failures", "3")
+        self._fail_auth(3)
 
-        for _ in range(3):
-            with self.assertRaises((AuthenticationError, ResponseError)) as ctx:
-                self.client.execute_command("AUTH", "fallbackuser", "wrong")
-            self.assertNotIn(RATE_LIMIT_ERROR, str(ctx.exception))
-
+        self._ldap_unavailable_with_acl_fallback()
         with self.assertRaises((AuthenticationError, ResponseError)) as ctx:
             self.client.execute_command("AUTH", "fallbackuser", "secret")
         self.assertIn(RATE_LIMIT_ERROR, str(ctx.exception))

@@ -185,13 +185,12 @@ fn rate_limit_key(ctx: &Context) -> Option<String> {
     Some(rate_limit::client_key(&addr))
 }
 
-/// Whether a failed LDAP authentication is passed on to Valkey's own
+/// Whether a failed LDAP authentication, other than LDAP being unavailable
+/// (always refunded, see `should_refund`), is passed on to Valkey's own
 /// password check. Mirrors the routing in `auth_reply_callback`.
 fn falls_through_to_acl(ctx: &Context, err: &VkLdapError) -> bool {
     if err.is_user_not_found() {
         false
-    } else if err.is_server_unavailable() {
-        configs::is_acl_fallback_enabled(ctx)
     } else {
         // handle_credential_rejection
         !configs::get_return_auth_errors(ctx)
@@ -199,12 +198,18 @@ fn falls_through_to_acl(ctx: &Context, err: &VkLdapError) -> bool {
 }
 
 /// Whether an attempt admitted by the rate limiter can be refunded. Attempts
-/// stay counted unless LDAP accepted the credentials, or the error rules out
-/// a wrong password and the client isn't passed on to Valkey's own password
-/// check, whose outcome the module can't see.
+/// stay counted unless LDAP accepted the credentials, LDAP was unavailable, or
+/// the error rules out a wrong password and the client isn't passed on to
+/// Valkey's own password check, whose outcome the module can't see.
+///
+/// Attempts made while LDAP is unavailable aren't counted even when the ACL
+/// fallback then checks the password, so clients reconnecting during an
+/// outage aren't blocked (#38). Password guesses against the fallback are
+/// therefore not limited while LDAP is down.
 fn should_refund(ctx: &Context, result: &Result<Vec<String>, VkLdapError>) -> bool {
     match result {
         Ok(_) => true,
+        Err(err) if err.is_server_unavailable() => true,
         Err(err) => err.rules_out_wrong_password() && !falls_through_to_acl(ctx, err),
     }
 }
@@ -320,15 +325,19 @@ pub fn ldap_auth_blocking_callback(
         Ok(_) => Ok(AUTH_HANDLED),
         Err(err) => {
             error!("failed to submit ldap bind request: {err}");
-            if configs::get_return_auth_errors(ctx) {
-                // The credentials never reached LDAP and the client gets an
-                // error, so the attempt doesn't count
+            let return_errors = configs::get_return_auth_errors(ctx);
+            // The credentials never reached LDAP. The attempt doesn't count if
+            // the client gets an error, or if LDAP is unavailable (see
+            // `should_refund`); otherwise Valkey's own password check runs
+            // next and it stays counted.
+            if return_errors || err.is_server_unavailable() {
                 if let Some(attempt) = &submitted_attempt {
                     rate_limit::refund_attempt(attempt);
                 }
+            }
+            if return_errors {
                 Err(ValkeyError::String(err.to_string()))
             } else {
-                // Valkey's own password check runs next; keep it counted
                 Ok(AUTH_NOT_HANDLED)
             }
         }
